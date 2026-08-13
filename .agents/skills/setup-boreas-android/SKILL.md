@@ -27,7 +27,7 @@ is identical on both architectures.
 
 | Name | Path |
 | --- | --- |
-| `setup` | [setup.sh](setup.sh) |
+| `setup` | [scripts/setup.sh](scripts/setup.sh) |
 | `build-inputs` | [docs/build-inputs.md](../../../docs/build-inputs.md) |
 | `ci-workflow` | [.github/workflows/ci.yml](../../../.github/workflows/ci.yml) |
 | `version-catalog` | [gradle/libs.versions.toml](../../../gradle/libs.versions.toml) |
@@ -39,7 +39,7 @@ Run `setup` from anywhere. It locates the repository from its own path.
 <setup_command>
 
 ```bash
-bash .agents/skills/setup-boreas-android/setup.sh
+bash .agents/skills/setup-boreas-android/scripts/setup.sh
 ```
 
 </setup_command>

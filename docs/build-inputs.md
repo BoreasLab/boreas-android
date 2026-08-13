@@ -163,7 +163,7 @@ composable needs a device or Robolectric, and that is a dependency worth decidin
 on rather than acquiring as a side effect of wanting a first test here.
 
 Every gate runs locally on either architecture. Provision the toolchain with
-`.agents/skills/setup-boreas-android/setup.sh` and run the four commands it
+`.agents/skills/setup-boreas-android/scripts/setup.sh` and run the four commands it
 prints: `:domain:test` and `:app:testDebugUnitTest`, `assembleDebug` and
 `assembleRelease`, `:app:lintDebug` and `:domain:lint`, and the design gate.
 

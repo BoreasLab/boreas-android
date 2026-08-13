@@ -6,8 +6,8 @@
 # Run it, then build. Re-running is safe: every step checks its own postcondition
 # and skips work that is already done.
 #
-#   bash .agents/skills/setup-boreas-android/setup.sh
-#   bash .agents/skills/setup-boreas-android/setup.sh --reinstall
+#   bash .agents/skills/setup-boreas-android/scripts/setup.sh
+#   bash .agents/skills/setup-boreas-android/scripts/setup.sh --reinstall
 #
 # Assumes bash 4+, GNU coreutils, and: curl, tar, unzip, sha256sum.
 #
@@ -129,7 +129,7 @@ readonly ACTIVATE="$ROOT/activate.sh"
 
 # Repository root, from this script's own location, so the script works whether
 # or not it is run from the checkout and whether or not git is installed.
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 readonly REPO
 readonly CI_WORKFLOW="$REPO/.github/workflows/ci.yml"
 readonly VERSION_CATALOG="$REPO/gradle/libs.versions.toml"
@@ -363,7 +363,7 @@ verify() {
   [[ -x "$AAPT2_ENTRY" ]] || die "no aapt2 entry point at $AAPT2_ENTRY"
 
   "$JAVA_HOME_DIR/bin/java" -version >/dev/null 2>&1 || die "the installed JDK does not run"
-  "$AAPT2_ENTRY" version >/dev/null ||
+  "$AAPT2_ENTRY" version >/dev/null 2>&1 ||
     die "aapt2 does not run through the $toolchain resource toolchain"
 }
 
