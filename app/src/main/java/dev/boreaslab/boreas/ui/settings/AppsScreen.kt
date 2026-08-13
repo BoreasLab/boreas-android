@@ -19,6 +19,9 @@ import dev.boreaslab.boreas.design.component.ContainerState
 import dev.boreaslab.boreas.design.component.EmptyState
 import dev.boreaslab.boreas.design.component.StateContainer
 import dev.boreaslab.boreas.design.component.SwitchRow
+import dev.boreaslab.boreas.design.component.NoticeCard
+import dev.boreaslab.boreas.design.component.NoticeTone
+import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.ui.InstalledApp
 import dev.boreaslab.boreas.ui.PreviewSurface
 
@@ -37,6 +40,7 @@ fun AppsScreen(
     apps: List<InstalledApp>?,
     excluded: Set<String>,
     search: String,
+    alwaysOn: AlwaysOn,
     onSearch: (String) -> Unit,
     onToggle: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -57,6 +61,13 @@ fun AppsScreen(
             style = BoreasTheme.type.bodyMd,
             color = BoreasTheme.colors.body,
         )
+
+        if (alwaysOn is AlwaysOn.On && alwaysOn.lockdown) {
+            NoticeCard(
+                tone = NoticeTone.Warning,
+                title = stringResource(R.string.always_on_lockdown_apps),
+            )
+        }
 
         BoreasTextField(
             label = stringResource(R.string.apps_search),
@@ -111,7 +122,7 @@ fun AppsScreen(
 @Preview(name = "Apps: loading", showBackground = true)
 @Composable
 private fun AppsLoadingPreview() = PreviewSurface {
-    AppsScreen(apps = null, excluded = emptySet(), search = "", onSearch = {}, onToggle = { _, _ -> })
+    AppsScreen(null, emptySet(), "", AlwaysOn.Off, {}, { _, _ -> })
 }
 
 @Preview(name = "Apps: no search match", showBackground = true)
@@ -121,6 +132,7 @@ private fun AppsFilteredPreview() = PreviewSurface {
         apps = emptyList(),
         excluded = emptySet(),
         search = "zzz",
+        alwaysOn = AlwaysOn.Off,
         onSearch = {},
         onToggle = { _, _ -> },
     )

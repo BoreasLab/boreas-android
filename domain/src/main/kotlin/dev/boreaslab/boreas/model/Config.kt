@@ -94,12 +94,35 @@ data class TunnelDraft(
     }
 }
 
-/** The outcome of parsing a whole draft: a trusted value, or every field problem. */
-data class TunnelValidation(
-    val config: PlatformConfig?,
-    val problems: Map<TunnelField, FieldProblem>,
-) {
-    val isValid: Boolean get() = config != null
+/**
+ * The outcome of parsing a whole draft.
+ *
+ * A sum rather than a nullable value beside a problem map: with a product, every
+ * consumer has to re-derive "did this work" from a null check, and one of them
+ * will branch on it differently. Here the two outcomes are eliminated
+ * exhaustively and a trusted [PlatformConfig] exists only on the branch that has
+ * one.
+ */
+sealed interface TunnelParse {
+
+    data class Valid(val config: PlatformConfig) : TunnelParse
+
+    data class Invalid(val problems: Map<TunnelField, FieldProblem>) : TunnelParse {
+        init {
+            require(problems.isNotEmpty()) { "an invalid parse must name at least one problem" }
+        }
+    }
+
+    companion object {
+        fun of(draft: TunnelDraft, excludedPackages: Set<String>): TunnelParse =
+            PlatformConfig.parse(draft, excludedPackages)
+    }
+}
+
+/** The problems for a field, or null when that field parsed. */
+fun TunnelParse.problemFor(field: TunnelField): FieldProblem? = when (this) {
+    is TunnelParse.Valid -> null
+    is TunnelParse.Invalid -> problems[field]
 }
 
 /**
@@ -116,7 +139,7 @@ data class PlatformConfig(
     val excludedPackages: Set<String>,
 ) {
     companion object {
-        fun parse(draft: TunnelDraft, excludedPackages: Set<String>): TunnelValidation {
+        fun parse(draft: TunnelDraft, excludedPackages: Set<String>): TunnelParse {
             val problems = mutableMapOf<TunnelField, FieldProblem>()
 
             val address = when (val r = Ipv4Address.parse(draft.address)) {
@@ -145,12 +168,11 @@ data class PlatformConfig(
                 }
             }
 
-            val config = if (problems.isEmpty() && address != null && mtu != null) {
-                PlatformConfig(address, mtu, dns, excludedPackages)
+            return if (problems.isEmpty() && address != null && mtu != null) {
+                TunnelParse.Valid(PlatformConfig(address, mtu, dns, excludedPackages))
             } else {
-                null
+                TunnelParse.Invalid(problems)
             }
-            return TunnelValidation(config, problems)
         }
     }
 }

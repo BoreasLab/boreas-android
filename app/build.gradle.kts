@@ -12,8 +12,14 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.boreaslab.boreas"
-        minSdk = 26
+        // The installed identity. Deliberately separate from `namespace`, which
+        // stays a code-organization concern and names the Kotlin package.
+        applicationId = "org.joefang.boreas.android"
+        // 29 is derived from a requirement, not picked for taste: VpnService's
+        // isAlwaysOn() and isLockdownEnabled() arrive at 29, and below that the
+        // app cannot read always-on state at all. Raising the floor deletes an
+        // entire "cannot know" variant from the model rather than guarding it.
+        minSdk = 29
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0-a1"

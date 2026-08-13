@@ -25,6 +25,17 @@ object SessionStateBus {
     private val _state = MutableStateFlow<VpnLifecycleState>(VpnLifecycleState.Stopped)
     val state: StateFlow<VpnLifecycleState> = _state.asStateFlow()
 
+    private val _alwaysOn = MutableStateFlow<AlwaysOn>(AlwaysOn.Unobserved)
+
+    /**
+     * Whether Android is keeping this tunnel up on its own.
+     *
+     * Readable only from the running service, so this stays [AlwaysOn.Unobserved]
+     * until the service has run once in this process. That is not the same as
+     * "off", and the interface says so rather than guessing.
+     */
+    val alwaysOn: StateFlow<AlwaysOn> = _alwaysOn.asStateFlow()
+
     private val _log = MutableStateFlow<List<TransitionRecord>>(emptyList())
 
     /** Newest first, bounded. Held in memory only and never written to disk. */
@@ -38,6 +49,10 @@ object SessionStateBus {
     /** Status snapshots update the running state without adding a log entry each second. */
     internal fun publishStatusOnly(state: VpnLifecycleState) {
         _state.value = state
+    }
+
+    internal fun publishAlwaysOn(state: AlwaysOn) {
+        _alwaysOn.value = state
     }
 
     internal fun clearLog() {

@@ -22,6 +22,16 @@ import kotlinx.coroutines.launch
 /** What the surface can ask the session owner to do. A closed set. */
 sealed interface SessionCommand {
     data class Start(val engine: EngineConfig, val platform: PlatformConfig) : SessionCommand
+
+    /**
+     * An attempt that failed at the platform boundary before it could start.
+     *
+     * The boundary owns parsing; the controller owns state. Without this command
+     * the caller would have to write the failure to the observable state itself,
+     * giving that state a second writer that can disagree with this one.
+     */
+    data class Reject(val operation: Operation, val failure: TypedFailure) : SessionCommand
+
     data object Stop : SessionCommand
 }
 
@@ -75,6 +85,8 @@ class SessionController(
             current = launch {
                 when (command) {
                     is SessionCommand.Start -> runStart(command)
+                    is SessionCommand.Reject ->
+                        _state.value = VpnLifecycleState.Failed(command.operation, command.failure)
                     SessionCommand.Stop -> runStop()
                 }
             }

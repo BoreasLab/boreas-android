@@ -51,6 +51,7 @@ fun DiagnosticsScreen(
     onSimulationChange: (Boolean) -> Unit,
     onClear: () -> Unit,
     onRestore: (List<TransitionRecord>) -> Unit,
+    onCopy: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var cleared by remember { mutableStateOf<List<TransitionRecord>?>(null) }
@@ -114,6 +115,24 @@ fun DiagnosticsScreen(
                         )
                     }
                 }
+                // `map` is inline, so the composable lookup is legal inside it;
+                // joinToString's transform is not, so the join happens after.
+                val transcript = list
+                    .map { "${formatClockTime(it.atMillis)}  ${describe(it.state)}" }
+                    .joinToString("\n")
+                var copied by remember { mutableStateOf(false) }
+
+                BoreasButton(
+                    label = stringResource(
+                        if (copied) R.string.diagnostics_copied else R.string.diagnostics_copy,
+                    ),
+                    onClick = {
+                        onCopy(transcript)
+                        copied = true
+                    },
+                    variant = ButtonVariant.Secondary,
+                    icon = if (copied) BoreasIcons.Check else BoreasIcons.Document,
+                )
                 BoreasButton(
                     label = stringResource(R.string.diagnostics_clear),
                     onClick = {
@@ -141,5 +160,5 @@ private fun describe(state: VpnLifecycleState): String = when (state) {
 @Preview(name = "Diagnostics: empty", showBackground = true)
 @Composable
 private fun DiagnosticsEmptyPreview() = PreviewSurface {
-    DiagnosticsScreen(emptyList(), true, false, {}, {}, {})
+    DiagnosticsScreen(emptyList(), true, false, {}, {}, {}, {})
 }

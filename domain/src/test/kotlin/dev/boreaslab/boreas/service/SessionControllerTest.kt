@@ -250,6 +250,23 @@ class SessionControllerTest {
         controller.shutdown()
     }
 
+    @Test
+    fun `a boundary rejection becomes a failed state without touching the engine`() = runTest {
+        val engine = FakeEngine()
+        val controller = SessionController({ engine }, FixedConsent(ConsentOutcome.Granted), this)
+
+        controller.submit(
+            SessionCommand.Reject(Operation.Start, TypedFailure.InterfaceRejected),
+        )
+        advanceUntilIdle()
+
+        val state = controller.state.value as VpnLifecycleState.Failed
+        assertEquals(TypedFailure.InterfaceRejected, state.failure)
+        assertEquals(Operation.Start, state.operation)
+        assertEquals("a rejected configuration never reaches the engine", 0, engine.startCount)
+        controller.shutdown()
+    }
+
     // Command coalescing.
 
     @Test

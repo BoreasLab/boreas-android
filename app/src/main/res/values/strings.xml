@@ -26,7 +26,6 @@
     <string name="action_stop">Stop tunnel</string>
     <string name="action_retry">Try again</string>
     <string name="action_cancel">Cancel</string>
-    <string name="action_details">Details</string>
 
     <string name="session_label">Session</string>
     <string name="session_uptime">Uptime</string>
@@ -77,16 +76,12 @@
     <string name="metric_bytes_out">Sent</string>
     <string name="metric_upstream_kind">Route</string>
     <string name="metric_upstream_protected">Sockets bypassed</string>
-    <string name="metric_no_baseline">No comparison yet</string>
 
     <string name="activity_empty_title">No counters yet</string>
     <string name="activity_empty_detail">The engine reports counters while a session runs. Start the tunnel to collect the first set.</string>
-    <string name="activity_error_title">Counters are unavailable</string>
-    <string name="activity_error_detail">The running session did not return a status snapshot.</string>
     <string name="activity_loading">Reading the status snapshot</string>
 
     <!-- Policy. Owned by the engine; this screen only chooses values. -->
-    <string name="policy_title">Policy</string>
     <string name="policy_intro">The engine decides what happens to every packet. These choices are handed to it when a session starts.</string>
     <string name="policy_group_filtering">Filtering</string>
     <string name="policy_profile">Rule profile</string>
@@ -112,11 +107,8 @@
     <string name="policy_pending_title">Changes are not applied yet</string>
     <string name="policy_pending_detail">The running session keeps its current policy until you restart the tunnel.</string>
     <string name="policy_apply">Restart tunnel to apply</string>
-    <string name="policy_discard">Discard changes</string>
-    <string name="policy_saved">Saved. Applies when the tunnel next starts.</string>
 
     <!-- Settings index. -->
-    <string name="settings_title">Settings</string>
     <string name="settings_tunnel">Tunnel</string>
     <string name="settings_tunnel_detail">Addresses, routes, DNS servers, and MTU</string>
     <string name="settings_apps">Apps</string>
@@ -149,6 +141,21 @@
     <string name="error_dns_shape">%1$s is not an IP address</string>
     <string name="error_required">Required</string>
 
+    <!-- Always-on VPN. Android owns the switch; Boreas can only report and explain. -->
+    <string name="always_on_title">Always-on VPN</string>
+    <string name="always_on_explain">Android can start this tunnel by itself and keep it running, including after a restart. Only Android can turn that on, in its own VPN settings.</string>
+    <string name="always_on_state_on">On</string>
+    <string name="always_on_state_on_detail">Android starts this tunnel without being asked and restarts it if it stops.</string>
+    <string name="always_on_state_lockdown">On, with lockdown</string>
+    <string name="always_on_state_lockdown_detail">Android also blocks traffic whenever the tunnel is down, so nothing leaves this device unfiltered between sessions.</string>
+    <string name="always_on_state_off">Off</string>
+    <string name="always_on_state_off_detail">This tunnel runs only while you have started it.</string>
+    <string name="always_on_state_unobserved">Not read yet</string>
+    <string name="always_on_state_unobserved_detail">Boreas reads this from the running service. Start the tunnel once, or check Android\'s VPN settings.</string>
+    <string name="always_on_open_settings">Open Android VPN settings</string>
+    <string name="always_on_lockdown_apps">With lockdown on, an app you exclude here gets no network at all while the tunnel is down.</string>
+    <string name="shield_always_on">Always-on</string>
+
     <!-- Apps. -->
     <string name="apps_title">Apps</string>
     <string name="apps_intro">By default every app uses the tunnel. Turn one off to send its traffic straight to the network.</string>
@@ -160,7 +167,6 @@
     <string name="apps_filtered_title">No app matches that search</string>
     <string name="apps_clear_search">Clear search</string>
     <string name="apps_loading">Reading installed apps</string>
-    <string name="apps_uses_tunnel">Uses the tunnel</string>
 
     <!-- Certificate. -->
     <string name="certificate_title">Certificate</string>
@@ -169,9 +175,6 @@
     <string name="certificate_absent_detail">TLS inspection stays off until the certificate is installed.</string>
     <string name="certificate_present">Installed</string>
     <string name="certificate_install">Install certificate</string>
-    <string name="certificate_remove">Remove certificate</string>
-    <string name="certificate_remove_confirm_title">Remove the Boreas certificate?</string>
-    <string name="certificate_remove_confirm_detail">Android opens its certificate settings, where you remove it yourself. TLS inspection turns off and connections stop being readable by the engine.</string>
     <string name="certificate_scope_title">What this certificate can and cannot do</string>
     <string name="certificate_scope_user">It goes in the personal store, so only apps that opt in to personal certificates will honor it. Many apps pin their own and will not.</string>
     <string name="certificate_scope_removal">Removing it is an Android action, not a Boreas one. Boreas can open the screen but cannot delete it for you.</string>
@@ -200,7 +203,6 @@
     <string name="about_engine">Packet engine</string>
     <string name="about_engine_absent">Not linked</string>
     <string name="about_role">Boreas keeps Android concerns in Kotlin and packet handling in a shared engine. This build contains the Kotlin half.</string>
-    <string name="about_licenses">Open source licenses</string>
     <string name="about_typefaces">Typefaces</string>
     <string name="about_typefaces_detail">EB Garamond, Inter, and JetBrains Mono, under the SIL Open Font License.</string>
 
@@ -212,10 +214,4 @@
     <string name="notification_starting">Starting the tunnel</string>
     <string name="notification_stopping">Stopping the tunnel</string>
 
-    <!-- Content descriptions and announcements. -->
-    <string name="cd_open">Open %1$s</string>
-    <string name="cd_session_state">Tunnel state: %1$s</string>
-    <string name="announce_running">Tunnel running</string>
-    <string name="announce_stopped">Tunnel stopped</string>
-    <string name="announce_failed">Tunnel stopped by an error</string>
 </resources>

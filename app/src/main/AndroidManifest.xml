@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      Package visibility for the per-app tunnel list.
+
+      From API 30 an app sees only packages it declares an interest in, so without
+      this the Apps screen is empty. The narrow form is used deliberately: this
+      grants sight of apps the reader already has a launcher icon for, which is
+      exactly the set that screen offers. QUERY_ALL_PACKAGES would grant sight of
+      every package on the device, which is more than choosing tunnel membership
+      needs and more than a privacy tool should ask for.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
@@ -40,6 +57,17 @@
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
+
+            <!--
+              Always-on VPN support. The field defaults to true when absent and
+              takes effect from API 27, so this declares the existing behavior
+              rather than changing it. It is written out because "the system may
+              start this service on its own" is a fact a reader of the manifest
+              should not have to infer from a default.
+            -->
+            <meta-data
+                android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
+                android:value="true" />
         </service>
 
     </application>

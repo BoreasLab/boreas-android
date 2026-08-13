@@ -2,8 +2,6 @@ package dev.boreaslab.boreas.ui
 
 import android.app.Application
 import android.content.Intent
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -13,11 +11,11 @@ import dev.boreaslab.boreas.BuildConfig
 import dev.boreaslab.boreas.data.SettingsRepository
 import dev.boreaslab.boreas.design.ThemeChoice
 import dev.boreaslab.boreas.model.EngineConfig
-import dev.boreaslab.boreas.model.PlatformConfig
 import dev.boreaslab.boreas.model.RuleProfile
 import dev.boreaslab.boreas.model.TunnelDraft
-import dev.boreaslab.boreas.model.TunnelValidation
+import dev.boreaslab.boreas.model.TunnelParse
 import dev.boreaslab.boreas.model.UpstreamRoute
+import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.service.BoreasVpnService
 import dev.boreaslab.boreas.service.ConsentBroker
 import dev.boreaslab.boreas.service.ConsentOutcome
@@ -35,11 +33,24 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** One installed app, as the Apps screen needs it. */
+/**
+ * One installed app, as the Apps screen needs it.
+ *
+ * [searchKey] is folded in when the list loads rather than recomputed per
+ * keystroke: lowercasing a label allocates a String, and doing that for every app
+ * on every character typed is work proportional to list size times query length
+ * for a result that never changes.
+ */
 data class InstalledApp(
     val packageName: String,
     val label: String,
-)
+    val searchKey: String,
+) {
+    companion object {
+        fun of(packageName: String, label: String) =
+            InstalledApp(packageName, label, "${label.lowercase()}\n$packageName")
+    }
+}
 
 /**
  * The single state holder for the whole surface.
@@ -56,6 +67,7 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     private val settings = SettingsRepository(app)
 
     val sessionState: StateFlow<VpnLifecycleState> = SessionStateBus.state
+    val alwaysOn: StateFlow<AlwaysOn> = SessionStateBus.alwaysOn
     val transitions: StateFlow<List<TransitionRecord>> = SessionStateBus.log
 
     val themeChoice: StateFlow<ThemeChoice> =
@@ -91,9 +103,9 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
      * Derived during collection rather than stored, so it can never disagree with
      * the text it describes.
      */
-    val tunnelValidation: StateFlow<TunnelValidation?> =
+    val tunnelParse: StateFlow<TunnelParse?> =
         combine(_tunnelDraft, excludedPackages) { draft, excluded ->
-            draft?.let { PlatformConfig.parse(it, excluded) }
+            draft?.let { TunnelParse.of(it, excluded) }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _installedApps = MutableStateFlow<List<InstalledApp>?>(null)
@@ -107,7 +119,7 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
             if (apps == null) return@combine null
             if (query.isBlank()) return@combine apps
             val needle = query.trim().lowercase()
-            apps.filter { it.label.lowercase().contains(needle) || it.packageName.contains(needle) }
+            apps.filter { it.searchKey.contains(needle) }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
@@ -125,9 +137,8 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
         app.startService(Intent(app, BoreasVpnService::class.java).setAction(BoreasVpnService.ACTION_STOP))
     }
 
-    fun deliverConsent(outcome: ConsentOutcome) {
-        viewModelScope.launch { ConsentBroker.deliver(outcome) }
-    }
+    /** Completing the pending slot cannot suspend, so this needs no coroutine. */
+    fun deliverConsent(outcome: ConsentOutcome) = ConsentBroker.deliver(outcome)
 
     // Preferences.
 
@@ -140,7 +151,7 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     fun setUpstream(route: UpstreamRoute) = updateEngineConfig { it.copy(upstream = route) }
 
     private fun updateEngineConfig(change: (EngineConfig) -> EngineConfig) {
-        viewModelScope.launch { settings.setEngineConfig(change(engineConfig.value)) }
+        viewModelScope.launch { settings.updateEngineConfig(change) }
     }
 
     fun setTunnelDraft(draft: TunnelDraft) {
@@ -150,9 +161,9 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
 
     fun setAppExcluded(packageName: String, excluded: Boolean) {
         viewModelScope.launch {
-            val next = excludedPackages.value.toMutableSet()
-            if (excluded) next.add(packageName) else next.remove(packageName)
-            settings.setExcludedPackages(next)
+            settings.updateExcludedPackages { current ->
+                if (excluded) current + packageName else current - packageName
+            }
         }
     }
 
@@ -169,7 +180,14 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     /**
      * Reads the launcher-visible app list off the main thread.
      *
-     * Sorted by label with a locale-aware collator built once, not per comparison.
+     * One `queryIntentActivities` call answers "which apps does the reader see in
+     * their launcher", instead of asking the package manager the same question once
+     * per installed app: that inner call is a binder round trip, so the loop was
+     * paying hundreds of IPCs to compute what a single query already returns.
+     *
+     * $O(n)$ label loads, which is irreducible because a name has to come from
+     * somewhere, plus one IPC for the set itself. Sorted with a collator built
+     * once rather than per comparison.
      */
     fun loadInstalledApps() {
         if (_installedApps.value != null) return
@@ -177,18 +195,20 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
             _installedApps.value = withContext(Dispatchers.IO) {
                 val manager = app.packageManager
                 val collator = java.text.Collator.getInstance()
+                val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
                 runCatching {
-                    manager.getInstalledApplications(PackageManager.GET_META_DATA)
+                    manager.queryIntentActivities(launcher, 0)
+                        .asSequence()
+                        .map { it.activityInfo.applicationInfo }
+                        .distinctBy { it.packageName }
                         .filter { it.packageName != app.packageName }
-                        .filter { manager.getLaunchIntentForPackage(it.packageName) != null || it.isUserApp() }
-                        .map { InstalledApp(it.packageName, manager.getApplicationLabel(it).toString()) }
+                        .map { InstalledApp.of(it.packageName, manager.getApplicationLabel(it).toString()) }
                         .sortedWith { a, b -> collator.compare(a.label, b.label) }
+                        .toList()
                 }.getOrDefault(emptyList())
             }
         }
     }
-
-    private fun ApplicationInfo.isUserApp() = flags and ApplicationInfo.FLAG_SYSTEM == 0
 
     companion object {
         fun factory(app: Application): ViewModelProvider.Factory = viewModelFactory {

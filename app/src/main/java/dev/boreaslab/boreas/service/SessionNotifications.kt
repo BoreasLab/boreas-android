@@ -7,6 +7,12 @@ import android.content.Intent
 import dev.boreaslab.boreas.MainActivity
 import dev.boreaslab.boreas.R
 
+/** What the foreground notification should be doing. A closed set. */
+sealed interface ForegroundIntent {
+    data class Show(val notification: Notification) : ForegroundIntent
+    data object Dismiss : ForegroundIntent
+}
+
 /**
  * The foreground notification.
  *
@@ -21,7 +27,7 @@ object SessionNotifications {
     const val CHANNEL_ID = "session"
     const val NOTIFICATION_ID = 1
 
-    fun build(context: Context, state: VpnLifecycleState): Notification? {
+    fun forState(context: Context, state: VpnLifecycleState): ForegroundIntent {
         val (title, showStop) = when (state) {
             VpnLifecycleState.Starting -> context.getString(R.string.notification_starting) to false
             VpnLifecycleState.AwaitingConsent -> context.getString(R.string.notification_starting) to false
@@ -34,7 +40,7 @@ object SessionNotifications {
                 }
                 label to true
             }
-            VpnLifecycleState.Stopped, is VpnLifecycleState.Failed -> return null
+            VpnLifecycleState.Stopped, is VpnLifecycleState.Failed -> return ForegroundIntent.Dismiss
         }
 
         val open = PendingIntent.getActivity(
@@ -67,6 +73,6 @@ object SessionNotifications {
             )
         }
 
-        return builder.build()
+        return ForegroundIntent.Show(builder.build())
     }
 }

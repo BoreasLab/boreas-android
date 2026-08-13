@@ -9,7 +9,7 @@ import dev.boreaslab.boreas.engine.EngineHost
 import dev.boreaslab.boreas.engine.SimulatedEngineHost
 import dev.boreaslab.boreas.engine.UnlinkedEngineHost
 import dev.boreaslab.boreas.model.Operation
-import dev.boreaslab.boreas.model.PlatformConfig
+import dev.boreaslab.boreas.model.TunnelParse
 import dev.boreaslab.boreas.model.TypedFailure
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,8 +23,8 @@ import kotlinx.coroutines.launch
  * compliance, routes, and lifecycle callbacks.
  *
  * A thin effect interpreter, as docs/platform-integration.md requires. It holds no
- * policy, parses nothing, and never sees a packet. It turns typed commands into
- * Android effects and publishes typed state back.
+ * policy, parses nothing about packets, and never sees one. It turns typed
+ * commands into Android effects and publishes typed state back.
  *
  * What this class deliberately does not do yet, and why:
  *
@@ -35,9 +35,6 @@ import kotlinx.coroutines.launch
  *    would create a descriptor nothing is responsible for closing.
  *  - It does not implement the protect(fd) callback. That seam belongs with the
  *    native bridge that needs it.
- *
- * Each has a matching gate in docs/implementation-plan.md. Adding any of them here
- * ahead of the core would be the Android-specific datapath the invariants forbid.
  */
 class BoreasVpnService : VpnService() {
 
@@ -73,6 +70,73 @@ class BoreasVpnService : VpnService() {
     }
 
     /**
+     * What an incoming Intent means. Parsed once, at the boundary.
+     *
+     * `onStartCommand` receives Intents from three sources with different
+     * authority, and telling them apart is a correctness matter rather than
+     * tidiness: Android starts an always-on VPN by calling `startService()` with
+     * no action of ours, and a sticky restart redelivers a null Intent entirely.
+     * Matching only on our own actions silently ignores both, which is exactly how
+     * an always-on VPN ends up never starting.
+     */
+    private sealed interface ServiceRequest {
+        data object Start : ServiceRequest
+        data object Stop : ServiceRequest
+        data object Ignore : ServiceRequest
+    }
+
+    private fun parseRequest(intent: Intent?): ServiceRequest = when (intent?.action) {
+        ACTION_START -> ServiceRequest.Start
+        ACTION_STOP -> ServiceRequest.Stop
+        // No action of ours: Android starting an always-on VPN, or a sticky
+        // restart of one. Honored only while always-on is actually on, so a stray
+        // Intent can never raise a tunnel nobody asked for.
+        null -> if (isAlwaysOn) ServiceRequest.Start else ServiceRequest.Ignore
+        else -> ServiceRequest.Ignore
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        SessionStateBus.publishAlwaysOn(readAlwaysOn())
+
+        when (parseRequest(intent)) {
+            ServiceRequest.Start -> scope.launch { startRequested() }
+            ServiceRequest.Stop -> controller.submit(SessionCommand.Stop)
+            ServiceRequest.Ignore -> Unit
+        }
+
+        // Under always-on, Android's contract is that this tunnel stays up, so a
+        // process death should bring it back. Otherwise it must not: a tunnel that
+        // silently reappears is one nobody asked for.
+        return if (isAlwaysOn) START_STICKY else START_NOT_STICKY
+    }
+
+    /**
+     * Reads always-on state from the running service.
+     *
+     * Both queries arrive at API 29, which is this app's minimum, so there is no
+     * version branch here and no unknown case to represent.
+     */
+    private fun readAlwaysOn(): AlwaysOn =
+        if (isAlwaysOn) AlwaysOn.On(lockdown = isLockdownEnabled) else AlwaysOn.Off
+
+    private suspend fun startRequested() {
+        val engineConfig = settings.engineConfig.first()
+        val draft = settings.tunnelDraft.first()
+        val excluded = settings.excludedPackages.first()
+
+        // Parsed once, at the untrusted entry. A session starts only with a value
+        // already refined into an immutable trusted type. A rejection travels back
+        // through the controller rather than being written to the state stream
+        // from here, so the observable state keeps exactly one writer.
+        val command = when (val parse = TunnelParse.of(draft, excluded)) {
+            is TunnelParse.Valid -> SessionCommand.Start(engineConfig, parse.config)
+            is TunnelParse.Invalid ->
+                SessionCommand.Reject(Operation.Start, TypedFailure.InterfaceRejected)
+        }
+        controller.submit(command)
+    }
+
+    /**
      * Publishes controller state to the UI and drives the foreground notification.
      *
      * A new counter snapshot for the session already running is not a transition,
@@ -91,6 +155,7 @@ class BoreasVpnService : VpnService() {
                     SessionStateBus.publishStatusOnly(state)
                 } else {
                     SessionStateBus.publish(state, System.currentTimeMillis())
+                    SessionStateBus.publishAlwaysOn(readAlwaysOn())
                     applyForeground(state)
                 }
                 previous = state
@@ -98,46 +163,22 @@ class BoreasVpnService : VpnService() {
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> scope.launch { startRequested() }
-            ACTION_STOP -> controller.submit(SessionCommand.Stop)
-        }
-        // Do not recreate with a stale intent. A restart must come from the reader,
-        // because a tunnel that silently reappears is one nobody asked for.
-        return START_NOT_STICKY
-    }
-
-    private suspend fun startRequested() {
-        val engineConfig = settings.engineConfig.first()
-        val draft = settings.tunnelDraft.first()
-        val excluded = settings.excludedPackages.first()
-
-        // Parsed once, at the untrusted entry. The session starts only with a value
-        // already validated into an immutable trusted type.
-        val platform: PlatformConfig? = PlatformConfig.parse(draft, excluded).config
-        if (platform == null) {
-            SessionStateBus.publish(
-                VpnLifecycleState.Failed(Operation.Start, TypedFailure.InterfaceRejected),
-                System.currentTimeMillis(),
-            )
-            return
-        }
-        controller.submit(SessionCommand.Start(engineConfig, platform))
-    }
-
     private fun applyForeground(state: VpnLifecycleState) {
-        val notification = SessionNotifications.build(this, state)
-        if (notification == null) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-            return
-        }
-        if (state.isTransitional || state is VpnLifecycleState.Running) {
-            startForeground(SessionNotifications.NOTIFICATION_ID, notification)
-        } else {
-            getSystemService(NotificationManager::class.java)
-                .notify(SessionNotifications.NOTIFICATION_ID, notification)
+        when (val intent = SessionNotifications.forState(this, state)) {
+            is ForegroundIntent.Show ->
+                if (state.isTransitional || state is VpnLifecycleState.Running) {
+                    startForeground(SessionNotifications.NOTIFICATION_ID, intent.notification)
+                } else {
+                    getSystemService(NotificationManager::class.java)
+                        .notify(SessionNotifications.NOTIFICATION_ID, intent.notification)
+                }
+
+            ForegroundIntent.Dismiss -> {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                // Under always-on, Android owns this service's lifetime and will
+                // start it again; stopping ourselves would only fight it.
+                if (!isAlwaysOn) stopSelf()
+            }
         }
     }
 
@@ -157,7 +198,9 @@ class BoreasVpnService : VpnService() {
     }
 
     companion object {
-        const val ACTION_START = "dev.boreaslab.boreas.START"
-        const val ACTION_STOP = "dev.boreaslab.boreas.STOP"
+        // Derived from the application id rather than written out, so the two
+        // cannot drift apart and a rename cannot leave a dead intent filter.
+        const val ACTION_START = BuildConfig.APPLICATION_ID + ".START"
+        const val ACTION_STOP = BuildConfig.APPLICATION_ID + ".STOP"
     }
 }

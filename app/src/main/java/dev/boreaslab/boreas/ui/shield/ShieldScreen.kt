@@ -36,6 +36,7 @@ import dev.boreaslab.boreas.design.component.Overline
 import dev.boreaslab.boreas.design.component.SessionMetric
 import dev.boreaslab.boreas.model.EngineConfig
 import dev.boreaslab.boreas.model.RuleProfile
+import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import dev.boreaslab.boreas.ui.PreviewSurface
 import dev.boreaslab.boreas.ui.copyFor
@@ -58,6 +59,7 @@ import kotlinx.coroutines.delay
 fun ShieldScreen(
     state: VpnLifecycleState,
     savedConfig: EngineConfig,
+    alwaysOn: AlwaysOn,
     onStart: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
@@ -72,7 +74,7 @@ fun ShieldScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Space.md),
         ) {
-            SessionCard(state)
+            SessionCard(state, alwaysOn)
 
             if (state is VpnLifecycleState.Running && state.status.simulated) {
                 NoticeCard(
@@ -115,7 +117,11 @@ fun ShieldScreen(
  * hierarchy argument on this screen: nothing else competes with it.
  */
 @Composable
-private fun SessionCard(state: VpnLifecycleState, modifier: Modifier = Modifier) {
+private fun SessionCard(
+    state: VpnLifecycleState,
+    alwaysOn: AlwaysOn,
+    modifier: Modifier = Modifier,
+) {
     val colors = BoreasTheme.colors
     val reduced = LocalReducedMotion.current
 
@@ -175,6 +181,23 @@ private fun SessionCard(state: VpnLifecycleState, modifier: Modifier = Modifier)
         }
         if (state is VpnLifecycleState.Running) {
             RunningDetail(state, modifier = Modifier.padding(top = Space.lg))
+        }
+
+        // Named only when it is on. Off is the default nobody needs telling about,
+        // and unobserved is a Settings concern rather than something to qualify the
+        // headline with here.
+        if (alwaysOn is AlwaysOn.On) {
+            SessionMetric(
+                label = stringResource(R.string.shield_always_on),
+                value = stringResource(
+                    if (alwaysOn.lockdown) {
+                        R.string.always_on_state_lockdown
+                    } else {
+                        R.string.always_on_state_on
+                    },
+                ),
+                modifier = Modifier.padding(top = Space.md),
+            )
         }
     }
 }
@@ -268,7 +291,7 @@ private fun PrimaryControl(
 @Preview(name = "Shield: stopped", showBackground = true)
 @Composable
 private fun ShieldStoppedPreview() = PreviewSurface {
-    ShieldScreen(VpnLifecycleState.Stopped, EngineConfig(), {}, {})
+    ShieldScreen(VpnLifecycleState.Stopped, EngineConfig(), AlwaysOn.Off, {}, {})
 }
 
 @Preview(name = "Shield: engine not linked", showBackground = true)
@@ -280,6 +303,7 @@ private fun ShieldFailedPreview() = PreviewSurface {
             dev.boreaslab.boreas.model.TypedFailure.EngineUnavailable,
         ),
         EngineConfig(),
+        AlwaysOn.On(lockdown = true),
         {},
         {},
     )

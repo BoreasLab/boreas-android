@@ -1,6 +1,8 @@
 package dev.boreaslab.boreas.ui
 
 import android.app.Activity
+import android.content.Intent
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -11,6 +13,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -106,7 +111,18 @@ private fun BoreasNavGraph(
 ) {
     val session by viewModel.sessionState.collectAsStateWithLifecycle()
     val engineConfig by viewModel.engineConfig.collectAsStateWithLifecycle()
+    val alwaysOn by viewModel.alwaysOn.collectAsStateWithLifecycle()
     val back: () -> Unit = { navController.popBackStack() }
+
+    // Android owns the always-on switch, so the app can only hand the reader over.
+    // ACTION_VPN_SETTINGS has existed since API 24; the guard covers a device whose
+    // system image ships no Activity for it rather than a version difference.
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val openVpnSettings: () -> Unit = {
+        val intent = Intent(Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }
+    }
 
     NavHost(
         navController = navController,
@@ -118,6 +134,7 @@ private fun BoreasNavGraph(
                 ShieldScreen(
                     state = session,
                     savedConfig = engineConfig,
+                    alwaysOn = alwaysOn,
                     onStart = viewModel::startTunnel,
                     onStop = viewModel::stopTunnel,
                     modifier = Modifier.screenPadding(),
@@ -164,12 +181,14 @@ private fun BoreasNavGraph(
         composable(Destination.Tunnel.route) {
             ScreenScaffold(title = stringResourceOf(Destination.Tunnel), onBack = back) {
                 val draft by viewModel.tunnelDraft.collectAsStateWithLifecycle()
-                val validation by viewModel.tunnelValidation.collectAsStateWithLifecycle()
+                val parse by viewModel.tunnelParse.collectAsStateWithLifecycle()
                 TunnelScreen(
                     draft = draft,
-                    validation = validation,
+                    parse = parse,
                     session = session,
+                    alwaysOn = alwaysOn,
                     onChange = viewModel::setTunnelDraft,
+                    onOpenVpnSettings = openVpnSettings,
                     modifier = Modifier.screenPadding(),
                 )
             }
@@ -185,6 +204,7 @@ private fun BoreasNavGraph(
                     apps = apps,
                     excluded = excluded,
                     search = search,
+                    alwaysOn = alwaysOn,
                     onSearch = { viewModel.appSearch.value = it },
                     onToggle = viewModel::setAppExcluded,
                     modifier = Modifier.screenPadding(),
@@ -224,6 +244,7 @@ private fun BoreasNavGraph(
                     onSimulationChange = viewModel::setSimulationEnabled,
                     onClear = viewModel::clearTransitions,
                     onRestore = viewModel::restoreTransitions,
+                    onCopy = { clipboard.setText(AnnotatedString(it)) },
                     modifier = Modifier.screenPadding(),
                 )
             }

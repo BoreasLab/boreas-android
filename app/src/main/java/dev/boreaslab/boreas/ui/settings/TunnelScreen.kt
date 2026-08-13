@@ -20,7 +20,9 @@ import dev.boreaslab.boreas.design.component.NoticeTone
 import dev.boreaslab.boreas.model.FieldProblem
 import dev.boreaslab.boreas.model.TunnelDraft
 import dev.boreaslab.boreas.model.TunnelField
-import dev.boreaslab.boreas.model.TunnelValidation
+import dev.boreaslab.boreas.model.TunnelParse
+import dev.boreaslab.boreas.model.problemFor
+import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import dev.boreaslab.boreas.ui.PreviewSurface
 
@@ -42,9 +44,11 @@ import dev.boreaslab.boreas.ui.PreviewSurface
 @Composable
 fun TunnelScreen(
     draft: TunnelDraft?,
-    validation: TunnelValidation?,
+    parse: TunnelParse?,
     session: VpnLifecycleState,
+    alwaysOn: AlwaysOn,
     onChange: (TunnelDraft) -> Unit,
+    onOpenVpnSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val locked = session !is VpnLifecycleState.Stopped && session !is VpnLifecycleState.Failed
@@ -58,6 +62,8 @@ fun TunnelScreen(
             style = BoreasTheme.type.bodyMd,
             color = BoreasTheme.colors.body,
         )
+
+        AlwaysOnCard(alwaysOn = alwaysOn, onOpenVpnSettings = onOpenVpnSettings)
 
         if (locked) {
             NoticeCard(
@@ -79,7 +85,7 @@ fun TunnelScreen(
             value = draft.address,
             onValueChange = { onChange(draft.copy(address = it)) },
             help = stringResource(R.string.tunnel_address_help),
-            error = validation?.problems?.get(TunnelField.Address)?.let { copyFor(it) },
+            error = parse?.problemFor(TunnelField.Address)?.let { copyFor(it) },
             enabled = !locked,
             keyboardType = KeyboardType.Decimal,
         )
@@ -89,7 +95,7 @@ fun TunnelScreen(
             value = draft.mtu,
             onValueChange = { onChange(draft.copy(mtu = it)) },
             help = stringResource(R.string.tunnel_mtu_help),
-            error = validation?.problems?.get(TunnelField.Mtu)?.let { copyFor(it) },
+            error = parse?.problemFor(TunnelField.Mtu)?.let { copyFor(it) },
             enabled = !locked,
             keyboardType = KeyboardType.Number,
         )
@@ -99,7 +105,7 @@ fun TunnelScreen(
             value = draft.dns,
             onValueChange = { onChange(draft.copy(dns = it)) },
             help = stringResource(R.string.tunnel_dns_help),
-            error = validation?.problems?.get(TunnelField.Dns)?.let { copyFor(it) },
+            error = parse?.problemFor(TunnelField.Dns)?.let { copyFor(it) },
             enabled = !locked,
             singleLine = false,
             keyboardType = KeyboardType.Decimal,
@@ -123,9 +129,11 @@ private fun copyFor(problem: FieldProblem): String = when (problem) {
 private fun TunnelPreview() = PreviewSurface {
     TunnelScreen(
         draft = TunnelDraft(),
-        validation = TunnelValidation(null, emptyMap()),
+        parse = TunnelParse.of(TunnelDraft(), emptySet()),
         session = VpnLifecycleState.Stopped,
+        alwaysOn = AlwaysOn.Off,
         onChange = {},
+        onOpenVpnSettings = {},
     )
 }
 
@@ -134,14 +142,15 @@ private fun TunnelPreview() = PreviewSurface {
 private fun TunnelInvalidPreview() = PreviewSurface {
     TunnelScreen(
         draft = TunnelDraft(address = "10.0.0", mtu = "40"),
-        validation = TunnelValidation(
-            null,
+        parse = TunnelParse.Invalid(
             mapOf(
                 TunnelField.Address to FieldProblem.AddressShape,
                 TunnelField.Mtu to FieldProblem.MtuRange,
             ),
         ),
         session = VpnLifecycleState.Stopped,
+        alwaysOn = AlwaysOn.On(lockdown = true),
         onChange = {},
+        onOpenVpnSettings = {},
     )
 }

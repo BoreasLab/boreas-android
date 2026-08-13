@@ -3,6 +3,7 @@ package dev.boreaslab.boreas.model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -56,50 +57,57 @@ class ConfigParsingTest {
 
     @Test
     fun `a draft reports every bad field at once`() {
-        val validation = PlatformConfig.parse(
+        val parse = TunnelParse.of(
             TunnelDraft(address = "10.24.0", mtu = "12", dns = ""),
             excludedPackages = emptySet(),
         )
 
-        assertNull("no trusted value comes out of an invalid draft", validation.config)
-        assertEquals(FieldProblem.AddressShape, validation.problems[TunnelField.Address])
-        assertEquals(FieldProblem.MtuRange, validation.problems[TunnelField.Mtu])
+        // The type is what stops a trusted value escaping an invalid draft: there
+        // is no PlatformConfig on this branch to reach for.
+        val invalid = parse as TunnelParse.Invalid
+        assertEquals(FieldProblem.AddressShape, invalid.problems[TunnelField.Address])
+        assertEquals(FieldProblem.MtuRange, invalid.problems[TunnelField.Mtu])
+        assertEquals(FieldProblem.AddressShape, parse.problemFor(TunnelField.Address))
+        assertNull(parse.problemFor(TunnelField.Dns))
+    }
+
+    @Test
+    fun `an invalid parse cannot be constructed without naming a problem`() {
+        runCatching { TunnelParse.Invalid(emptyMap()) }
+            .onSuccess { fail("an invalid parse with no problem is not a state") }
     }
 
     @Test
     fun `dns accepts newlines, commas, and spaces between entries`() {
-        val validation = PlatformConfig.parse(
+        val parse = TunnelParse.of(
             TunnelDraft(dns = "9.9.9.9\n149.112.112.112, 1.1.1.1"),
             excludedPackages = emptySet(),
         )
 
-        assertTrue(validation.isValid)
         assertEquals(
             listOf("9.9.9.9", "149.112.112.112", "1.1.1.1"),
-            validation.config!!.dnsServers.map { it.text },
+            (parse as TunnelParse.Valid).config.dnsServers.map { it.text },
         )
     }
 
     @Test
     fun `empty dns is valid and means keep what the network supplies`() {
-        val validation = PlatformConfig.parse(TunnelDraft(dns = "  "), emptySet())
-        assertTrue(validation.isValid)
-        assertTrue(validation.config!!.dnsServers.isEmpty())
+        val parse = TunnelParse.of(TunnelDraft(dns = "  "), emptySet())
+        assertTrue((parse as TunnelParse.Valid).config.dnsServers.isEmpty())
     }
 
     @Test
     fun `a bad dns entry is reported with the entry that caused it`() {
-        val validation = PlatformConfig.parse(TunnelDraft(dns = "9.9.9.9\nnope"), emptySet())
+        val parse = TunnelParse.of(TunnelDraft(dns = "9.9.9.9\nnope"), emptySet())
 
-        assertNull(validation.config)
         assertEquals(
             FieldProblem.DnsShape("nope"),
-            validation.problems[TunnelField.Dns],
+            (parse as TunnelParse.Invalid).problems[TunnelField.Dns],
         )
     }
 
     @Test
     fun `the default draft is valid, so a first run has nothing to fix`() {
-        assertTrue(PlatformConfig.parse(TunnelDraft(), emptySet()).isValid)
+        assertTrue(TunnelParse.of(TunnelDraft(), emptySet()) is TunnelParse.Valid)
     }
 }

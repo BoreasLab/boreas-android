@@ -48,13 +48,14 @@ class SettingsRepository(private val context: Context) {
         prefs[Keys.theme].toEnum(ThemeChoice.entries, ThemeChoice.System)
     }
 
-    val engineConfig: Flow<EngineConfig> = context.dataStore.data.map { prefs ->
-        EngineConfig(
-            profile = prefs[Keys.profile].toEnum(RuleProfile.entries, RuleProfile.Standard),
-            inspectTls = prefs[Keys.inspectTls] ?: false,
-            upstream = prefs[Keys.upstream].toEnum(UpstreamRoute.entries, UpstreamRoute.Direct),
-        )
-    }
+    val engineConfig: Flow<EngineConfig> = context.dataStore.data.map(::decodeEngineConfig)
+
+    /** One decoder, shared by the read flow and the read-modify-write below. */
+    private fun decodeEngineConfig(prefs: Preferences) = EngineConfig(
+        profile = prefs[Keys.profile].toEnum(RuleProfile.entries, RuleProfile.Standard),
+        inspectTls = prefs[Keys.inspectTls] ?: false,
+        upstream = prefs[Keys.upstream].toEnum(UpstreamRoute.entries, UpstreamRoute.Direct),
+    )
 
     val tunnelDraft: Flow<TunnelDraft> = context.dataStore.data.map { prefs ->
         val fallback = TunnelDraft()
@@ -84,11 +85,20 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setTheme(choice: ThemeChoice) = put(Keys.theme, choice.name)
 
-    suspend fun setEngineConfig(config: EngineConfig) {
+    /**
+     * Applies [transform] to the stored configuration inside one transaction.
+     *
+     * The read and the write must not be separated: reading `.value` outside,
+     * transforming, then writing lets two fast changes interleave so the second
+     * overwrites the first with a stale base. DataStore's `edit` is the atomic
+     * primitive, so the transform has to run inside it.
+     */
+    suspend fun updateEngineConfig(transform: (EngineConfig) -> EngineConfig) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.profile] = config.profile.name
-            prefs[Keys.inspectTls] = config.inspectTls
-            prefs[Keys.upstream] = config.upstream.name
+            val next = transform(decodeEngineConfig(prefs))
+            prefs[Keys.profile] = next.profile.name
+            prefs[Keys.inspectTls] = next.inspectTls
+            prefs[Keys.upstream] = next.upstream.name
         }
     }
 
@@ -100,7 +110,12 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    suspend fun setExcludedPackages(packages: Set<String>) = put(Keys.excluded, packages)
+    /** Read-modify-write inside the transaction, for the same reason. */
+    suspend fun updateExcludedPackages(transform: (Set<String>) -> Set<String>) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.excluded] = transform(prefs[Keys.excluded] ?: emptySet())
+        }
+    }
 
     suspend fun setSimulationEnabled(enabled: Boolean) = put(Keys.simulation, enabled)
 
