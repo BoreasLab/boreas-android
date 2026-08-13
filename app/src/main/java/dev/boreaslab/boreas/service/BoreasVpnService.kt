@@ -163,18 +163,31 @@ class BoreasVpnService : VpnService() {
         }
     }
 
+    /**
+     * Applies the notification decision the state already carries.
+     *
+     * Nothing is re-derived here. The previous shape asked whether the state was
+     * transitional to decide between promoting and posting, which mixed a question
+     * about the interface with one about foreground-service eligibility, and the
+     * posting branch turned out to be unreachable because every state that wanted a
+     * notification also answered yes to that predicate.
+     */
     private fun applyForeground(state: VpnLifecycleState) {
+        val notifications = getSystemService(NotificationManager::class.java)
         when (val intent = SessionNotifications.forState(this, state)) {
-            is ForegroundIntent.Show ->
-                if (state.isTransitional || state is VpnLifecycleState.Running) {
-                    startForeground(SessionNotifications.NOTIFICATION_ID, intent.notification)
-                } else {
-                    getSystemService(NotificationManager::class.java)
-                        .notify(SessionNotifications.NOTIFICATION_ID, intent.notification)
-                }
+            is ForegroundIntent.Promote ->
+                startForeground(SessionNotifications.NOTIFICATION_ID, intent.notification)
+
+            is ForegroundIntent.Post ->
+                notifications.notify(SessionNotifications.NOTIFICATION_ID, intent.notification)
 
             ForegroundIntent.Dismiss -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
+                // stopForeground only removes a notification this service was
+                // promoted with. One that arrived through notify() has to be
+                // cancelled, or a declined consent leaves "Starting the tunnel" on
+                // screen with nothing behind it.
+                notifications.cancel(SessionNotifications.NOTIFICATION_ID)
                 // Under always-on, Android owns this service's lifetime and will
                 // start it again; stopping ourselves would only fight it.
                 if (!isAlwaysOn) stopSelf()

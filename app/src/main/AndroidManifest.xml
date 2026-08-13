@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!--
       Package visibility for the per-app tunnel list.
@@ -71,13 +72,27 @@
           systemExempted is the type Google names for VPN apps. It is not a
           discretionary choice among the seventeen: every other type describes work
           this service does not do, and specialUse is the residual bucket for cases
-          the named types miss, which this is not. See docs/verified-inputs.md.
+          the named types miss, which this is not.
+
+          The suppression is narrow and deliberate. Lint reads that type as needing
+          FOREGROUND_SERVICE_SYSTEM_EXEMPTED plus SCHEDULE_EXACT_ALARM or
+          USE_EXACT_ALARM, but Google documents seven independent ways to qualify and
+          holding an exact-alarm permission is only one of them. Being the configured
+          VPN is another, and it is the one that applies here. The other six cannot
+          be seen in a manifest, so the check assumes the worst.
+
+          Satisfying it as written would mean requesting a permission this app has no
+          use for, and USE_EXACT_ALARM is restricted on Play to alarm and calendar
+          apps, so asking for it would be a false claim about what this app is. The
+          suppression sits on this element rather than in a lint config, so it covers
+          this service and nothing else. See docs/verified-inputs.md.
         -->
         <service
             android:name=".service.BoreasVpnService"
             android:exported="false"
             android:foregroundServiceType="systemExempted"
-            android:permission="android.permission.BIND_VPN_SERVICE">
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            tools:ignore="ForegroundServicePermission">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>

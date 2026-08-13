@@ -40,6 +40,8 @@ rather than degrades.
 |---|---|---|
 | A declared type is mandatory from API 34 | [Android Developers, foreground service types are required](https://developer.android.com/about/versions/14/changes/fgs-types-required): starting a foreground service with no declared type raises `MissingForegroundServiceTypeException` | `android:foregroundServiceType` is declared on the service element. |
 | VPN apps, "configured using Settings > Network & Internet > VPN", are eligible for `systemExempted` | [Android Developers, foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types) | `systemExempted`, not `specialUse`. `specialUse` is the residual bucket for cases the named types miss, and it carries a Play Console review of a free-text justification; this case is named. |
+| The seven ways to qualify for `systemExempted` are independent, and holding `SCHEDULE_EXACT_ALARM` or `USE_EXACT_ALARM` is only one of them | Same page: demo mode, Device Owner, Profile Owner, `ROLE_EMERGENCY`, device admin, exact-alarm permission holders, VPN apps, listed as alternatives | Lint's `ForegroundServicePermission` reads the type as requiring the exact-alarm permission, because the other six criteria cannot be seen in a manifest. Suppressed on the `<service>` element, not in lint configuration. Requesting an alarm permission to satisfy a static check would ask for capability the app has no use for, and `USE_EXACT_ALARM` is restricted on Play to alarm and calendar apps. |
+| Eligibility is evaluated when `startForeground` is called, and a `SecurityException` is what a failure looks like | Lint's own explanation for `ForegroundServicePermission`: "when the foreground service is started with a foregroundServiceType that has missing permissions, a SecurityException will be thrown" | The service posts a plain notification in `AwaitingConsent` and promotes only from `Starting` onward. Before consent the app is not the configured VPN, so it satisfies no criterion; promoting there was the one call that could have thrown. |
 | `FOREGROUND_SERVICE_SYSTEM_EXEMPTED` arrives at API 34 | `api-versions.xml`: `since="34"` for the permission constant, matching `ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED` in `android.jar` | The `<uses-permission>` carries `android:minSdkVersion="34"`, so it is not requested on devices where it does not exist. |
 | `POST_NOTIFICATIONS` is a runtime permission from API 33 | `api-versions.xml`: `since="33"` | The app requests it when the reader first starts the tunnel. Without the grant the foreground notification is suppressed, so the tunnel would run with nothing on screen saying so. |
 | `<uses-permission>` takes `android:maxSdkVersion` and no minimum | [Android Developers, `<uses-permission>`](https://developer.android.com/guide/topics/manifest/uses-permission-element) lists `android:name` and `android:maxSdkVersion` only | Both permissions above are declared unconditionally. A platform that does not know a permission name ignores it, which is the behavior a minimum would have been reaching for. |
@@ -57,7 +59,10 @@ rather than degrades.
 - Vendor and Android-version behavior of user-store CA trust and WebView.
 - Whether a vendor image accepts `systemExempted` for this app. The type is
   declared per Google's documented eligibility; whether a given OEM's
-  foreground-service policy agrees has not been observed on hardware.
+  foreground-service policy agrees has not been observed on hardware. The first
+  device run should watch specifically for a `SecurityException` out of
+  `startForeground` on the `Starting` transition, which is where the VPN-app
+  criterion is first relied on.
 - Background-restriction behavior for the selected target SDK.
 - Socket bypass behavior for the actual native runtime and egress transports.
 - Device battery, wakeup, memory, throughput and network-transition behavior.

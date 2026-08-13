@@ -7,9 +7,24 @@ import android.content.Intent
 import dev.boreaslab.boreas.MainActivity
 import dev.boreaslab.boreas.R
 
-/** What the foreground notification should be doing. A closed set. */
+/**
+ * What the service should do about its notification. A closed set.
+ *
+ * [Promote] and [Post] are separated because promoting is not free at API 34 and
+ * above: `startForeground` on a service typed `systemExempted` succeeds only while
+ * the app satisfies one of that type's eligibility criteria, and the one this app
+ * relies on is being the configured VPN. Deciding that here, where the states are
+ * known, keeps the caller from re-deriving it from a lifecycle predicate that was
+ * never about permissions.
+ */
 sealed interface ForegroundIntent {
-    data class Show(val notification: Notification) : ForegroundIntent
+
+    /** The session owns, or is about to own, a tunnel. Foreground is warranted. */
+    data class Promote(val notification: Notification) : ForegroundIntent
+
+    /** Something to say, but no tunnel yet, so no promotion to go with it. */
+    data class Post(val notification: Notification) : ForegroundIntent
+
     data object Dismiss : ForegroundIntent
 }
 
@@ -28,17 +43,27 @@ object SessionNotifications {
     const val NOTIFICATION_ID = 1
 
     fun forState(context: Context, state: VpnLifecycleState): ForegroundIntent {
-        // A guard separates the simulated session from the real one, so the two
-        // labels sit at the same level as every other state rather than one being
-        // reached through a conditional inside the other.
-        val (title, showStop) = when (state) {
-            VpnLifecycleState.Starting,
-            VpnLifecycleState.AwaitingConsent,
-            -> context.getString(R.string.notification_starting) to false
-            is VpnLifecycleState.Stopping -> context.getString(R.string.notification_stopping) to false
+        // Each state names its own copy, whether it warrants foreground, and whether
+        // stopping is offered. A guard separates the simulated session from the real
+        // one, so the two labels sit at the same level as every other state rather
+        // than one being reached through a conditional inside the other.
+        val (title, promote, showStop) = when (state) {
+            // Consent has not been given, so the app is not the configured VPN and
+            // does not yet satisfy any systemExempted criterion. Promoting here is
+            // what would raise SecurityException, and it buys nothing: the reader is
+            // looking at the system's own permission dialog. The service was started
+            // while the app was in the foreground, so no promotion deadline is
+            // running against it either.
+            VpnLifecycleState.AwaitingConsent ->
+                Triple(context.getString(R.string.notification_starting), false, false)
+            VpnLifecycleState.Starting ->
+                Triple(context.getString(R.string.notification_starting), true, false)
+            is VpnLifecycleState.Stopping ->
+                Triple(context.getString(R.string.notification_stopping), true, false)
             is VpnLifecycleState.Running if state.status.simulated ->
-                context.getString(R.string.notification_running_simulated) to true
-            is VpnLifecycleState.Running -> context.getString(R.string.notification_running) to true
+                Triple(context.getString(R.string.notification_running_simulated), true, true)
+            is VpnLifecycleState.Running ->
+                Triple(context.getString(R.string.notification_running), true, true)
             VpnLifecycleState.Stopped, is VpnLifecycleState.Failed -> return ForegroundIntent.Dismiss
         }
 
@@ -72,6 +97,11 @@ object SessionNotifications {
             )
         }
 
-        return ForegroundIntent.Show(builder.build())
+        val notification = builder.build()
+        return if (promote) {
+            ForegroundIntent.Promote(notification)
+        } else {
+            ForegroundIntent.Post(notification)
+        }
     }
 }
