@@ -11,10 +11,16 @@
 # unnecessary.
 #
 # Nothing in this app is reached by reflection. Manifest components are kept by
-# R8 from the merged manifest, the ViewModel is built by a lambda rather than by
-# `Class.newInstance`, and no persisted value depends on a Kotlin identifier
-# surviving minification: see `Persisted` in :domain, where every stored token is
-# written out rather than derived from the name of the constant that carries it.
+# R8 from the merged manifest, and the ViewModel is built by a lambda rather than
+# by `Class.newInstance`.
+#
+# Two settings are stored as `Enum.name`, so their constants' names are the
+# storage format. No keep rule appears here for them, and one would not help if
+# it did: `name()` returns a string the compiler passes to the enum constructor
+# in `<clinit>`, not the name of the static field, so renaming the field does not
+# change it and keeping the field would not protect it. Worth confirming against
+# the first release build rather than assumed, and worth remembering before
+# renaming one of those constants after the app has shipped.
 
 # Crash reports are read by people. Without these the line numbers in a release
 # stack trace are gone, and the trace names a file that R8 renamed, so the report

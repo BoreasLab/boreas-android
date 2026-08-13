@@ -9,11 +9,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dev.boreaslab.boreas.model.EngineConfig
-import dev.boreaslab.boreas.model.Persisted
 import dev.boreaslab.boreas.model.RuleProfile
 import dev.boreaslab.boreas.model.TunnelDraft
 import dev.boreaslab.boreas.model.UpstreamRoute
-import dev.boreaslab.boreas.model.toPersisted
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -27,9 +25,11 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("b
  * half-typed entry is the reader's work and must not be destroyed by a validation
  * pass or by the process being killed while they are looking at another app.
  *
- * An enum is stored by the token it declares, not by the name of its constant, and
- * read back through a total lookup, so an unknown or corrupted value falls back to
- * the default instead of throwing. See [Persisted].
+ * An enum is stored by name and read back through a total lookup, so an unknown or
+ * corrupted value falls back to the default instead of throwing. The name is the
+ * storage format, which is safe while nothing has shipped: renaming a constant
+ * after the first release would silently reset every reader's choice, so from that
+ * point a rename here needs a migration rather than a refactor.
  */
 class SettingsRepository(private val context: Context) {
 
@@ -49,9 +49,9 @@ class SettingsRepository(private val context: Context) {
 
     /** One decoder, shared by the read flow and the read-modify-write below. */
     private fun decodeEngineConfig(prefs: Preferences) = EngineConfig(
-        profile = prefs[Keys.profile].toPersisted(RuleProfile.entries, RuleProfile.Standard),
+        profile = prefs[Keys.profile].toEnum(RuleProfile.entries, RuleProfile.Standard),
         inspectTls = prefs[Keys.inspectTls] ?: false,
-        upstream = prefs[Keys.upstream].toPersisted(UpstreamRoute.entries, UpstreamRoute.Direct),
+        upstream = prefs[Keys.upstream].toEnum(UpstreamRoute.entries, UpstreamRoute.Direct),
     )
 
     val tunnelDraft: Flow<TunnelDraft> = context.dataStore.data.map { prefs ->
@@ -91,9 +91,9 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateEngineConfig(transform: (EngineConfig) -> EngineConfig) {
         context.dataStore.edit { prefs ->
             val next = transform(decodeEngineConfig(prefs))
-            prefs[Keys.profile] = next.profile.wire
+            prefs[Keys.profile] = next.profile.name
             prefs[Keys.inspectTls] = next.inspectTls
-            prefs[Keys.upstream] = next.upstream.wire
+            prefs[Keys.upstream] = next.upstream.name
         }
     }
 
@@ -121,3 +121,7 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[key] = value }
     }
 }
+
+/** Total lookup: an unknown stored name resolves to the default rather than throwing. */
+private fun <T : Enum<T>> String?.toEnum(values: List<T>, fallback: T): T =
+    values.firstOrNull { it.name == this } ?: fallback

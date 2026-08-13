@@ -53,12 +53,11 @@ the text report from disk rather than aiming lint at stdout.
 
 ## Language level
 
-Kotlin 2.4.10, at the compiler's default language version. These are used
+Kotlin 2.4.10, at the compiler's default language version. Two features are used
 deliberately rather than incidentally:
 
 | Feature | Stable since | Used for |
 |---|---|---|
-| Persisted enums | n/a | Not a language feature but the same discipline: `Persisted` in `:domain` gives every stored value a token written out rather than taken from the constant's name, so a rename during a refactor cannot discard a reader's stored choice and minification cannot change the format. `PersistedTest` pins the tokens. |
 | Explicit backing fields | 2.4.0 | Observable state cells. One cell gets one name, exposed at a read-only type and mutable only inside its owner, which replaces the private-mutable-plus-public-view pair the repository used before. `.github/scripts/design-gate.sh` asserts that no `_`-prefixed shadow returns and that nothing casts the exposed value back to a `Mutable*Flow`, which is the guarantee the old `asStateFlow()` wrapper used to carry. |
 | Guard conditions in `when` | 2.2.0 | Cases that were a conditional nested inside one branch, most visibly lockdown beside the other always-on states and the simulated session beside the real one. Exhaustiveness is unaffected: each guarded branch is followed by an unguarded one for the same type. |
 
@@ -146,7 +145,7 @@ runs as `ContrastLawTest` in `:domain`.
 
 ## Build verification status
 
-`:domain:test` (43 tests), `:domain:compileKotlin` under `explicitApi()`, and
+`:domain:test` (38 tests), `:domain:compileKotlin` under `explicitApi()`, and
 `:app:compileDebugKotlin` and `:app:compileReleaseKotlin` under
 `allWarningsAsErrors` all pass locally, warning-free.
 
