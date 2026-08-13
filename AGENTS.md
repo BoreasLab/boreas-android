@@ -5,6 +5,10 @@
 Read [docs/README.md](docs/README.md). Read the document that owns the boundary
 you will change before introducing code or dependencies.
 
+If this host has no userspace Kotlin and Android toolchain, follow
+[setup-boreas-android](.agents/skills/setup-boreas-android/SKILL.md). It keeps
+the JDK, SDK, Gradle, Kotlin artifacts, caches, and temporary HOME under `/tmp`.
+
 ## Non-Negotiable Invariants
 
 - Kotlin and Jetpack Compose are the native UI and Android framework shell.
