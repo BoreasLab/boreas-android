@@ -110,9 +110,9 @@ jobs:
         shell: bash
         run: ./.github/scripts/android-sdk.sh 'platforms;android-37.0' 'build-tools;37.0.0'
 
-      - name: Test the pure module
+      - name: Test
         shell: bash
-        run: ./gradlew --no-daemon :domain:test
+        run: ./gradlew --no-daemon :domain:test :app:testDebugUnitTest
 
       # Before lint, deliberately. Lint is configured to fail on warnings, so
       # running it first would stop the job and leave the question of whether the
@@ -122,17 +122,19 @@ jobs:
         shell: bash
         run: ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
 
-      - name: Lint the Android module
+      # Runs even when assembly failed. The two answer different questions, and a
+      # run that reports only the first of them costs a whole round trip to learn
+      # the second.
+      - name: Lint both modules
+        if: ${{ !cancelled() }}
         shell: bash
-        run: ./gradlew --no-daemon :app:lintDebug
+        run: ./gradlew --no-daemon :app:lintDebug :domain:lint
 
       # AGP 9 always writes the reports and has deprecated the switches that used
-      # to aim them at stdout, so the text report is read back from disk. `always`
-      # because the report is worth most on the run where the step above failed,
-      # and the whole file because a truncated finding list costs another push to
-      # complete.
-      - name: Print the lint report
-        if: always()
+      # to aim them at stdout, so the text report is read back from disk. The whole
+      # file, because a truncated finding list costs another push to complete.
+      - name: Print the lint reports
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           found=0
@@ -140,7 +142,7 @@ jobs:
             found=1
             printf '\n===== %s =====\n' "$report"
             cat -- "$report"
-          done < <(find app/build -name 'lint-results-*.txt' -type f)
+          done < <(find app/build domain/build -name 'lint-results*.txt' -type f 2>/dev/null)
           if ((found == 0)); then
             printf 'no lint text report was written\n'
           fi
@@ -166,6 +168,7 @@ jobs:
             domain/build/reports/tests/**
             domain/build/test-results/**
             app/build/reports/lint-results-*.html
+            domain/build/reports/lint-results*.html
           if-no-files-found: ignore
           retention-days: 7
 

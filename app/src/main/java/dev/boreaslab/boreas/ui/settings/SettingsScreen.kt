@@ -58,13 +58,6 @@ fun SettingsScreen(
 
         BoreasCard(surface = CardSurface.Filled, padding = Space.xs) {
             NavigationRow(
-                title = stringResource(R.string.settings_appearance),
-                detail = stringResource(R.string.settings_appearance_detail),
-                leading = BoreasIcons.Settings,
-                onClick = { onOpen(Destination.Detail.Appearance) },
-            )
-            RowDivider()
-            NavigationRow(
                 title = stringResource(R.string.settings_diagnostics),
                 detail = stringResource(R.string.settings_diagnostics_detail),
                 leading = BoreasIcons.Document,

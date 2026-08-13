@@ -40,7 +40,6 @@ import dev.boreaslab.boreas.ui.Destination.TopLevel
 import dev.boreaslab.boreas.ui.activity.ActivityScreen
 import dev.boreaslab.boreas.ui.policy.PolicyScreen
 import dev.boreaslab.boreas.ui.settings.AboutScreen
-import dev.boreaslab.boreas.ui.settings.AppearanceScreen
 import dev.boreaslab.boreas.ui.settings.AppsScreen
 import dev.boreaslab.boreas.ui.settings.CertificateScreen
 import dev.boreaslab.boreas.ui.settings.DiagnosticsScreen
@@ -293,16 +292,6 @@ private fun BoreasNavGraph(
             }
         }
 
-        composable(Detail.Appearance.route) {
-            ScreenScaffold(title = stringResourceOf(Detail.Appearance), onBack = back) {
-                val theme by viewModel.themeChoice.collectAsStateWithLifecycle()
-                AppearanceScreen(
-                    choice = theme,
-                    onChoose = viewModel::setTheme,
-                    modifier = Modifier.screenPadding(),
-                )
-            }
-        }
 
         composable(Detail.Diagnostics.route) {
             ScreenScaffold(title = stringResourceOf(Detail.Diagnostics), onBack = back) {

@@ -5,7 +5,10 @@ package dev.boreaslab.boreas.model
 public value class SessionId(public val value: String)
 
 /** Where the engine sends upstream traffic. Part of EngineConfig, shown as status. */
-public enum class UpstreamRoute { Direct, Proxy }
+public enum class UpstreamRoute(override val wire: String) : Persisted {
+    Direct("direct"),
+    Proxy("proxy"),
+}
 
 /**
  * An immutable status snapshot.

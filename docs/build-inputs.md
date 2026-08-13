@@ -15,7 +15,7 @@ value here with the reason, not silently in a build file.
 | `targetSdk` | 36 | Held one behind deliberately. [Verified inputs](verified-inputs.md) records foreground-service behavior for the target SDK as unverified until device work; raise this with a device result attached, not before. |
 | `minSdk` | 29 | Derived from a requirement rather than taste: `VpnService.isAlwaysOn()` and `isLockdownEnabled()` arrive at 29, and below it always-on state cannot be read at all. Raising the floor deletes a whole "cannot know" variant from the model instead of guarding it. |
 | JVM target | 17 | Both modules. |
-| Application id | `dev.boreaslab.boreas` | Provisional. Nothing depends on it yet, so it is cheap to change before the first signed build. |
+| Application id | `org.joefang.boreas.android` | The installed identity, kept separate from the `namespace` `dev.boreaslab.boreas`, which stays a code-organization concern naming the Kotlin package. |
 
 ## Open
 
@@ -26,13 +26,12 @@ this one.
 |---|---|
 | ABI list | A2. There is no native library to build for, so there is nothing to choose between. |
 | Signing model | A5. No release candidate exists. |
-| Foreground-service type | A4 and a device observation. The manifest declares the service with `BIND_VPN_SERVICE` and the `android.net.VpnService` intent filter and no `foregroundServiceType`. Confirm on a device at the chosen target SDK before adding one. |
 
 ## Modules
 
 | Module | Plugin | Holds |
 |---|---|---|
-| `:domain` | `kotlin.jvm` | The model, the engine seam, the lifecycle state machine. No Android type, enforced by the module boundary rather than by review. Its tests run on a plain JVM. |
+| `:domain` | `kotlin.jvm`, `com.android.lint` | The model, the engine seam, the lifecycle state machine. No Android type, enforced by the module boundary rather than by review. Its tests run on a plain JVM. |
 | `:app` | `com.android.application` | Compose, the design system, `BoreasVpnService`, and every other Android adapter. |
 
 The split exists because AGENTS.md requires framework effects to stay in Kotlin
@@ -45,8 +44,8 @@ instead of a convention someone has to notice in review.
 |---|---|---|
 | `allWarningsAsErrors` | both modules | A warning is a defect the compiler already located. Tolerated once, the list grows until nobody reads it. |
 | `explicitApi()` | `:domain` only | Every declaration states its visibility and its return type, so what is public is a decision rather than a default and an edited body cannot silently change a published signature. Not applied to `:app`: it is an application rather than a published surface, and every `@Composable` would have to write out `: Unit` for no reader's benefit. |
-| `lint { warningsAsErrors, abortOnError, checkDependencies, checkTestSources }` | `:app` | Same rule for the tool that sees what the compiler cannot. |
-| `lint { baseline = null }` | `:app` | A baseline converts today's findings into permanent exemptions. Adding one needs a reason recorded here. |
+| `lint { warningsAsErrors, abortOnError, checkTestSources }` | both modules | Same rule for the tool that sees what the compiler cannot. `:domain` applies `com.android.lint` for this: without it `:app`'s `checkDependencies` reports that it "will treat :domain as an external dependency and not analyze it", which quietly excluded half the source tree. |
+| `lint { baseline = null }` | both modules | A baseline converts today's findings into permanent exemptions. Adding one needs a reason recorded here. |
 
 Report format is not configured: AGP 9 always writes the text, HTML, and XML
 reports and has deprecated the switches that used to select them, so CI prints
@@ -54,11 +53,12 @@ the text report from disk rather than aiming lint at stdout.
 
 ## Language level
 
-Kotlin 2.4.10, at the compiler's default language version. Two features are used
+Kotlin 2.4.10, at the compiler's default language version. These are used
 deliberately rather than incidentally:
 
 | Feature | Stable since | Used for |
 |---|---|---|
+| Persisted enums | n/a | Not a language feature but the same discipline: `Persisted` in `:domain` gives every stored value a token written out rather than taken from the constant's name, so a rename during a refactor cannot discard a reader's stored choice and minification cannot change the format. `PersistedTest` pins the tokens. |
 | Explicit backing fields | 2.4.0 | Observable state cells. One cell gets one name, exposed at a read-only type and mutable only inside its owner, which replaces the private-mutable-plus-public-view pair the repository used before. `.github/scripts/design-gate.sh` asserts that no `_`-prefixed shadow returns and that nothing casts the exposed value back to a `Mutable*Flow`, which is the guarantee the old `asStateFlow()` wrapper used to carry. |
 | Guard conditions in `when` | 2.2.0 | Cases that were a conditional nested inside one branch, most visibly lockdown beside the other always-on states and the simulated session beside the real one. Exhaustiveness is unaffected: each guarded branch is followed by an unguarded one for the same type. |
 
@@ -71,7 +71,7 @@ Each is declared in `gradle/libs.versions.toml` and used by name.
 | `androidx.activity:activity-compose` | The Compose entry point and the consent Activity result. |
 | `androidx.lifecycle:lifecycle-runtime-compose` | Lifecycle-aware state collection. |
 | `androidx.lifecycle:lifecycle-viewmodel-compose` | The single state holder. |
-| `androidx.navigation:navigation-compose` | Four peer destinations plus six detail routes, with saved state per destination. |
+| `androidx.navigation:navigation-compose` | Four peer destinations plus five detail routes, with saved state per destination. |
 | `androidx.datastore:datastore-preferences` | Preferences as a flow, which is what makes a persisted setting observable without a change listener written by hand. |
 | `org.jetbrains.kotlinx:kotlinx-coroutines-core` | `:domain` only. |
 
@@ -107,7 +107,7 @@ the second and third behind the first.
 | Job | Asserts |
 |---|---|
 | `gate` | `.github/scripts/design-gate.sh`. No toolchain, so a punctuation slip or a stray hex literal answers while the build is still provisioning. |
-| `build` | Gradle wrapper checksum, `:domain:test`, `assembleDebug` and `assembleRelease`, then `:app:lintDebug`, uploading the unsigned APKs and the reports. Assembly runs before lint deliberately: lint fails on warnings, so running it first would leave "does the artifact build at all" unanswered for another round trip. |
+| `build` | Gradle wrapper checksum, `:domain:test` and `:app:testDebugUnitTest`, `assembleDebug` and `assembleRelease`, then lint over both modules, uploading the unsigned APKs and the reports. Assembly runs before lint deliberately, and lint runs even when assembly failed: the two answer different questions, and a run reporting only the first costs a whole round trip to learn the second. |
 | `workflows` | `actionlint`, `shellcheck` over the scripts, and `zizmor`. |
 
 ### Supply chain
@@ -146,12 +146,18 @@ runs as `ContrastLawTest` in `:domain`.
 
 ## Build verification status
 
-`:domain:test` (38 tests), `:domain:compileKotlin` under `explicitApi()`, and
+`:domain:test` (43 tests), `:domain:compileKotlin` under `explicitApi()`, and
 `:app:compileDebugKotlin` and `:app:compileReleaseKotlin` under
 `allWarningsAsErrors` all pass locally, warning-free.
 
-Three things cannot run on this host and CI is where they first execute:
-`:app:lintDebug`, `assembleDebug`, and `assembleRelease`. The build host is
+`:app:testDebugUnitTest` holds the pure parts of the Android module: route and
+label uniqueness, and the shape of the detail routes. Asserting a rendered
+composable needs a device or Robolectric, and that is a dependency worth deciding
+on rather than acquiring as a side effect of wanting a first test here.
+
+Four things cannot run on this host and CI is where they first execute:
+`:app:testDebugUnitTest`, `:app:lintDebug`, `assembleDebug`, and
+`assembleRelease`. The build host is
 `aarch64` and Google publishes `aapt2` for `linux` as an `x86_64` binary only, so
 `processDebugResources` cannot start its daemon and every task downstream of
 resource compilation is unreachable here. `actionlint` is the same story: the

@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import dev.boreaslab.boreas.design.BoreasTheme
 import dev.boreaslab.boreas.design.Space
-import dev.boreaslab.boreas.design.ThemeChoice
 
 /**
  * The canvas a preview renders on.
@@ -21,7 +20,7 @@ fun PreviewSurface(
     dark: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    BoreasTheme(choice = if (dark) ThemeChoice.Dark else ThemeChoice.Light) {
+    BoreasTheme(dark = dark) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

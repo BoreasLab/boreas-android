@@ -186,8 +186,12 @@ public data class PlatformConfig(
     }
 }
 
-/** How much the engine acts on what it sees. */
-public enum class RuleProfile { Off, Standard, Strict }
+/** How much the engine acts on what it sees. Stored, so it names its own token. */
+public enum class RuleProfile(override val wire: String) : Persisted {
+    Off("off"),
+    Standard("standard"),
+    Strict("strict"),
+}
 
 /**
  * Policy and egress choices handed to the engine at start.

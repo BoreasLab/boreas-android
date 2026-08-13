@@ -115,8 +115,6 @@
     <string name="settings_apps_detail">Choose which apps use the tunnel</string>
     <string name="settings_certificate">Certificate</string>
     <string name="settings_certificate_detail">Install or remove the Boreas certificate</string>
-    <string name="settings_appearance">Appearance</string>
-    <string name="settings_appearance_detail">Theme</string>
     <string name="settings_diagnostics">Diagnostics</string>
     <string name="settings_diagnostics_detail">Recent lifecycle events and typed errors</string>
     <string name="settings_about">About</string>
@@ -179,12 +177,6 @@
     <string name="certificate_scope_user">It goes in the personal store, so only apps that opt in to personal certificates will honor it. Many apps pin their own and will not.</string>
     <string name="certificate_scope_removal">Removing it is an Android action, not a Boreas one. Boreas can open the screen but cannot delete it for you.</string>
 
-    <!-- Appearance. -->
-    <string name="appearance_title">Appearance</string>
-    <string name="theme_heading">Theme</string>
-    <string name="theme_system">Follow the system</string>
-    <string name="theme_light">Light</string>
-    <string name="theme_dark">Dark</string>
 
     <!-- Diagnostics. -->
     <string name="diagnostics_title">Diagnostics</string>

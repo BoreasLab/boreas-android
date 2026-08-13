@@ -9,7 +9,6 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.boreaslab.boreas.BuildConfig
 import dev.boreaslab.boreas.data.SettingsRepository
-import dev.boreaslab.boreas.design.ThemeChoice
 import dev.boreaslab.boreas.model.EngineConfig
 import dev.boreaslab.boreas.model.RuleProfile
 import dev.boreaslab.boreas.model.TunnelDraft
@@ -69,9 +68,6 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     val sessionState: StateFlow<VpnLifecycleState> = SessionStateBus.state
     val alwaysOn: StateFlow<AlwaysOn> = SessionStateBus.alwaysOn
     val transitions: StateFlow<List<TransitionRecord>> = SessionStateBus.log
-
-    val themeChoice: StateFlow<ThemeChoice> =
-        settings.themeChoice.stateIn(viewModelScope, SharingStarted.Eagerly, ThemeChoice.System)
 
     val engineConfig: StateFlow<EngineConfig> =
         settings.engineConfig.stateIn(viewModelScope, SharingStarted.Eagerly, EngineConfig())
@@ -142,8 +138,6 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     fun deliverConsent(outcome: ConsentOutcome) = ConsentBroker.deliver(outcome)
 
     // Preferences.
-
-    fun setTheme(choice: ThemeChoice) = viewModelScope.launch { settings.setTheme(choice) }
 
     fun setProfile(profile: RuleProfile) = updateEngineConfig { it.copy(profile = profile) }
 

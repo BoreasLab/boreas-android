@@ -102,4 +102,9 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
 
+    // Plain JVM tests only. The pure parts of this module, route and token sets,
+    // need no device and no Robolectric. Asserting a rendered composable needs one
+    // or the other, and that is a dependency worth deciding on rather than
+    // acquiring as a side effect of wanting a first test here.
+    testImplementation(libs.junit)
 }

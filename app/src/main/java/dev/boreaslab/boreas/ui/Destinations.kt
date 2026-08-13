@@ -48,7 +48,6 @@ sealed interface Destination {
         Tunnel("settings/tunnel", R.string.tunnel_title),
         Apps("settings/apps", R.string.apps_title),
         Certificate("settings/certificate", R.string.certificate_title),
-        Appearance("settings/appearance", R.string.appearance_title),
         Diagnostics("settings/diagnostics", R.string.diagnostics_title),
         About("settings/about", R.string.about_title),
     }

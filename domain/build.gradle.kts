@@ -1,5 +1,10 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    // Without this, `:app`'s checkDependencies finds a plain JVM project and warns
+    // that it "will treat :domain as an external dependency and not analyze it",
+    // which quietly excluded half the source tree from lint. The plugin gives this
+    // module its own lint tasks and makes it analyzable from `:app`.
+    alias(libs.plugins.android.lint)
 }
 
 /**
@@ -33,6 +38,14 @@ kotlin {
         // less means the first one is tolerated and the hundredth is invisible.
         allWarningsAsErrors.set(true)
     }
+}
+
+/** Same strictness as `:app`. A finding here is a defect there. */
+lint {
+    warningsAsErrors = true
+    abortOnError = true
+    checkTestSources = true
+    baseline = null
 }
 
 dependencies {
