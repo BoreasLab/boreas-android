@@ -1,294 +1,165 @@
 ---
 name: setup-boreas-android
 description: >-
-  Sets up Boreas Android Kotlin and Android development entirely in a
-  userspace temporary directory, including a native JDK, Android SDK, Gradle
-  cache, isolated HOME, package verification, and architecture-aware checks.
-  Use when a Linux agent needs to build or test this repository without global
-  Kotlin, Java, Gradle, or Android SDK installation and without sudo. Do not use
-  for CI runner provisioning or Android device setup.
+  Provisions the complete Boreas Android toolchain in a userspace temporary
+  directory on Linux x86_64 or aarch64, installing a JDK, the Android SDK, an
+  isolated Gradle cache and HOME, and, on hosts that cannot execute Google's
+  x86_64-only aapt2, an emulated resource toolchain, so that unit tests, debug
+  and release APK assembly, and lint all run on either architecture with no
+  global installation and no sudo. Use when an agent needs to build, test, lint,
+  or reproduce a CI failure for this repository on a machine that lacks Java,
+  Gradle, Kotlin, or the Android SDK. Do not use for CI runner provisioning, for
+  Android device or emulator setup, or for shipping a release build.
 license: MIT
 compatibility: >-
-  Linux x86_64 or aarch64, network access, and bash, curl, jq, tar, unzip,
-  sha1sum, and sha256sum. Android app builds require x86_64 because Google's
-  Linux aapt2 package is x86-64; aarch64 supports the pure JVM domain gate.
+  Linux x86_64 or aarch64, network access, and bash 4+, curl, tar, unzip,
+  sha256sum. Roughly 6 GB of free space under the toolchain root. Both
+  architectures reach every gate; aarch64 runs resource tasks under emulation
+  and is therefore slower.
 ---
 
 # Setup Boreas Android
 
-Install nothing globally. Keep the JDK, Android SDK, Gradle distribution,
-dependency cache, temporary HOME, and build experiment under
-`/tmp/boreas-android-dev`. Kotlin comes from the Gradle plugins declared by the
-repository. Never install a standalone Kotlin compiler.
+One script provisions everything. Run it, then build. Every command after setup
+is identical on both architectures.
 
 ## Registry
 
 | Name | Path |
 | --- | --- |
+| `setup` | [setup.sh](setup.sh) |
 | `build-inputs` | [docs/build-inputs.md](../../../docs/build-inputs.md) |
 | `ci-workflow` | [.github/workflows/ci.yml](../../../.github/workflows/ci.yml) |
 | `version-catalog` | [gradle/libs.versions.toml](../../../gradle/libs.versions.toml) |
-| `wrapper-properties` | [gradle/wrapper/gradle-wrapper.properties](../../../gradle/wrapper/gradle-wrapper.properties) |
 
-## Invariant
+## Procedure
 
-Every mutable toolchain path must begin with `/tmp/boreas-android-dev`.
-Repository source remains in its checkout. The ignored `local.properties` may
-point into the temporary root. No command uses `sudo`, writes beneath `/usr`, or
-uses the caller's HOME, Gradle cache, JDK, Android SDK, or Kotlin installation.
+Run `setup` from anywhere. It locates the repository from its own path.
 
-Falsifier: run `:domain:test` through `env -i` with only the temporary paths. A
-successful run proves JDK, Gradle, Kotlin plugin, dependencies, and JVM tests do
-not depend on user-global configuration.
-
-## 1. Preflight
-
-Run from the repository root. Stop if the temporary root already exists but was
-not created for this repository. Do not delete an unknown directory.
-
-<preflight_commands>
+<setup_command>
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
-readonly ROOT=/tmp/boreas-android-dev
-
-case "$(uname -m)" in
-  x86_64) readonly ADOPTIUM_ARCH=x64 ;;
-  aarch64|arm64) readonly ADOPTIUM_ARCH=aarch64 ;;
-  *) printf 'unsupported architecture: %s\n' "$(uname -m)" >&2; exit 1 ;;
-esac
-
-for command in bash curl jq tar unzip sha1sum sha256sum; do
-  command -v "$command" >/dev/null || {
-    printf 'missing bootstrap command: %s\n' "$command" >&2
-    exit 1
-  }
-done
-
-test ! -e "$ROOT" || {
-  printf '%s already exists; verify and reuse it or choose explicitly how to preserve it\n' "$ROOT" >&2
-  exit 1
-}
-
-mkdir -p "$ROOT"/{downloads,home,gradle-home,android-sdk/cmdline-tools,jdk,tmp}
+bash .agents/skills/setup-boreas-android/setup.sh
 ```
 
-</preflight_commands>
+</setup_command>
 
-Expected: no output and directories only beneath the temporary root.
+Expected: a final block naming the host subdirectory, the resource toolchain
+(`native` or `emulated`), and the gate commands. Exit status 0.
 
-## 2. Install JDK 21
+Re-running is safe and is the correct repair action: every step checks its own
+postcondition and skips completed work. Use `--reinstall` only to discard the
+root and start over.
 
-Use Adoptium's structured API to select its latest Temurin 21 package for the
-host architecture. Verify its published SHA-256 before extraction. JDK 21 is the
-repository's CI runtime; source and bytecode targets remain JVM 17 as owned by
-`build-inputs`.
+Then source the generated activation script and run the gates. These four
+commands are the same on every supported host.
 
-<jdk_commands>
-
-```bash
-readonly JDK_METADATA="$ROOT/downloads/adoptium-jdk21.json"
-readonly JDK_ARCHIVE="$ROOT/downloads/temurin-jdk21.tar.gz"
-
-curl --disable --fail --show-error --location --retry 3 \
-  --output "$JDK_METADATA" \
-  "https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=$ADOPTIUM_ARCH&heap_size=normal&image_type=jdk&jvm_impl=hotspot&os=linux&vendor=eclipse"
-
-read -r JDK_SHA256 JDK_URL < <(
-  jq -er 'first(.[] | .binary.package) | [.checksum, .link] | @tsv' "$JDK_METADATA"
-)
-
-curl --disable --fail --show-error --location --retry 3 \
-  --output "$JDK_ARCHIVE" "$JDK_URL"
-printf '%s  %s\n' "$JDK_SHA256" "$JDK_ARCHIVE" | sha256sum --check
-tar -xzf "$JDK_ARCHIVE" --strip-components=1 -C "$ROOT/jdk"
-"$ROOT/jdk/bin/java" -version
-```
-
-</jdk_commands>
-
-Expected: checksum `OK`; Java reports Temurin/OpenJDK 21.
-
-## 3. Install Android Command-Line Tools
-
-Use the repository-verified command-line tools revision. Google publishes SHA-1
-for this archive in its SDK repository metadata. Check the digest before
-extraction.
-
-<android_tools_commands>
-
-```bash
-readonly ANDROID_TOOLS_REVISION=15859902
-readonly ANDROID_TOOLS_SHA1=040d3996a65543d22ec4bf73e4c37aa37a8d4af4
-readonly ANDROID_TOOLS_ARCHIVE="$ROOT/downloads/android-commandline-tools.zip"
-
-curl --disable --fail --show-error --location --retry 3 \
-  --output "$ANDROID_TOOLS_ARCHIVE" \
-  "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_TOOLS_REVISION}_latest.zip"
-printf '%s  %s\n' "$ANDROID_TOOLS_SHA1" "$ANDROID_TOOLS_ARCHIVE" | sha1sum --check
-
-unzip -q "$ANDROID_TOOLS_ARCHIVE" -d "$ROOT/android-sdk/cmdline-tools"
-mv "$ROOT/android-sdk/cmdline-tools/cmdline-tools" \
-  "$ROOT/android-sdk/cmdline-tools/latest"
-```
-
-</android_tools_commands>
-
-Expected: checksum `OK`; `cmdline-tools/latest/bin/sdkmanager` exists.
-
-## 4. Install Repository SDK Packages
-
-Derive package names from `ci-workflow`, the execution owner for SDK
-provisioning. The current pair is platform 37.0 and build-tools 37.0.0. Keep
-license files under the temporary SDK.
-
-<sdk_package_commands>
-
-```bash
-export HOME="$ROOT/home"
-export JAVA_HOME="$ROOT/jdk"
-export ANDROID_HOME="$ROOT/android-sdk"
-export ANDROID_SDK_ROOT="$ROOT/android-sdk"
-export GRADLE_USER_HOME="$ROOT/gradle-home"
-export TMPDIR="$ROOT/tmp"
-export PATH="$JAVA_HOME/bin:/usr/bin:/bin"
-
-mapfile -t SDK_PACKAGES < <(
-  grep -oE "'(platforms|build-tools);[^']+'" .github/workflows/ci.yml | tr -d "'"
-)
-((${#SDK_PACKAGES[@]} == 2)) || {
-  printf 'expected one platform and one build-tools package in CI, found %d\n' \
-    "${#SDK_PACKAGES[@]}" >&2
-  exit 1
-}
-
-readonly SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-"$SDKMANAGER" --licenses >/dev/null 2>&1 <<<"$(yes y | head -n 50)" || true
-"$SDKMANAGER" --install "${SDK_PACKAGES[@]}"
-```
-
-</sdk_package_commands>
-
-Expected: installation reaches 100 percent. A deprecation warning directing
-users to the new Android CLI is expected. On aarch64, continue using the
-Java-based `sdkmanager`: the replacement `android` executable and `aapt2` are
-x86-64 binaries.
-
-## 5. Bind the Checkout
-
-Create or replace the checkout's ignored `local.properties`. Do not commit it.
-Keep it aligned with the Android SDK environment variables. AGP reads each as an
-SDK source; an invalid `sdk.dir` warns and falls back to the valid environment
-path.
-
-<local_properties_template>
-
-```properties
-sdk.dir=/tmp/boreas-android-dev/android-sdk
-```
-
-</local_properties_template>
-
-Create `/tmp/boreas-android-dev/activate.sh` with the following content, then
-make it executable. The script is optional convenience; `env -i` remains the
-proof check.
-
-<activation_script_template>
-
-```bash
-#!/usr/bin/env bash
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export HOME="$ROOT/home"
-export JAVA_HOME="$ROOT/jdk"
-export ANDROID_HOME="$ROOT/android-sdk"
-export ANDROID_SDK_ROOT="$ROOT/android-sdk"
-export GRADLE_USER_HOME="$ROOT/gradle-home"
-export TMPDIR="$ROOT/tmp"
-export PATH="$JAVA_HOME/bin:/usr/bin:/bin"
-unset KOTLIN_HOME
-```
-
-</activation_script_template>
-
-## 6. Prove Isolation
-
-Run the domain gate with an empty inherited environment. This invokes the
-committed Gradle wrapper, which downloads pinned Gradle into the temporary
-Gradle home. Gradle resolves the pinned Kotlin plugin into the same cache.
-
-<isolation_check>
-
-```bash
-env -i \
-  HOME="$ROOT/home" \
-  USER="$(id -un)" \
-  LOGNAME="$(id -un)" \
-  PATH="$ROOT/jdk/bin:/usr/bin:/bin" \
-  JAVA_HOME="$ROOT/jdk" \
-  ANDROID_HOME="$ROOT/android-sdk" \
-  ANDROID_SDK_ROOT="$ROOT/android-sdk" \
-  GRADLE_USER_HOME="$ROOT/gradle-home" \
-  TMPDIR="$ROOT/tmp" \
-  ./gradlew --no-daemon :domain:test
-```
-
-</isolation_check>
-
-Expected: `BUILD SUCCESSFUL`. On first run, the wrapper downloads the Gradle
-version owned by `wrapper-properties`; Kotlin and dependency artifacts resolve
-from versions owned by `version-catalog`.
-
-## 7. Run Architecture-Appropriate Gates
-
-On x86_64, source the activation script and run the repository build gates.
-
-<x86_64_gate_commands>
+<gate_commands>
 
 ```bash
 source /tmp/boreas-android-dev/activate.sh
 ./gradlew --no-daemon :domain:test :app:testDebugUnitTest
 ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
 ./gradlew --no-daemon :app:lintDebug :domain:lint
+./.github/scripts/design-gate.sh
 ```
 
-</x86_64_gate_commands>
+</gate_commands>
 
-On aarch64, stop after pure JVM tasks such as `:domain:test` or
-`:domain:compileKotlin`. Google's Linux `aapt2` in build-tools 37.0.0 reports
-ELF machine `Advanced Micro Devices X86-64`; app resource processing cannot run
-natively. Use CI or an x86_64 Linux host for app assembly and lint.
+Expected: `BUILD SUCCESSFUL` from each Gradle invocation, `all properties hold`
+from the design gate, and two APKs under `app/build/outputs/apk`.
 
-## Reuse
+Set `BOREAS_DEV_ROOT` before running `setup` to relocate the toolchain. The
+activation script is written inside whatever root was used.
 
-If `/tmp/boreas-android-dev` already exists, verify before reuse:
+## Invariant
 
-<reuse_check>
+Every mutable toolchain path begins at the toolchain root, default
+`/tmp/boreas-android-dev`. Repository source stays in its checkout. The ignored
+`local.properties` and `$GRADLE_USER_HOME/gradle.properties` are generated. No
+command uses sudo, writes beneath `/usr`, or reads the caller's HOME, Gradle
+cache, JDK, Android SDK, or Kotlin installation.
+
+Falsifier: run a gate through `env -i` carrying only the generated paths. A pass
+proves the toolchain does not depend on user-global configuration.
+
+<isolation_check>
 
 ```bash
-test -x /tmp/boreas-android-dev/jdk/bin/java
-test -x /tmp/boreas-android-dev/android-sdk/cmdline-tools/latest/bin/sdkmanager
-test -f /tmp/boreas-android-dev/android-sdk/platforms/android-37.0/android.jar
-test -d /tmp/boreas-android-dev/android-sdk/build-tools/37.0.0
-source /tmp/boreas-android-dev/activate.sh
-./gradlew --no-daemon :domain:test
+env -i \
+  HOME=/tmp/boreas-android-dev/home \
+  PATH=/tmp/boreas-android-dev/toolchain/host/lib/jvm/bin:/usr/bin:/bin \
+  JAVA_HOME=/tmp/boreas-android-dev/toolchain/host/lib/jvm \
+  ANDROID_HOME=/tmp/boreas-android-dev/android-sdk \
+  ANDROID_SDK_ROOT=/tmp/boreas-android-dev/android-sdk \
+  GRADLE_USER_HOME=/tmp/boreas-android-dev/gradle-home \
+  TMPDIR=/tmp/boreas-android-dev/tmp \
+  ./gradlew --no-daemon :domain:test
 ```
 
-</reuse_check>
+</isolation_check>
 
-Rebuild when `ci-workflow` changes SDK package names, `build-inputs` changes the
-JDK policy, or command-line tools fail repository access. Never repair a stale
-temporary environment with global package installation.
+## What The Script Owns
+
+Read `setup` for the authoritative version pins and layout. It is the single
+source for both; nothing is restated here.
+
+Three suppliers, each the only sensible one for what it provides:
+
+| Supplier | Provides | Why |
+| --- | --- | --- |
+| conda-forge, through micromamba | JVM; on non-x86_64 hosts also the emulator and the x86_64 system libraries | Needed for emulation regardless, so owning the JVM too removes a mechanism rather than adding one |
+| Google | Android SDK, and aapt2 | Sole publisher of both |
+| This repository | Gradle, through the committed wrapper, and Kotlin, through the Gradle plugin | Already pinned here; never install either separately |
+
+Two versions are derived rather than pinned, so they cannot drift: SDK package
+names come from `ci-workflow`, and the aapt2 version comes from the AGP version
+in `version-catalog`. Bumping AGP therefore needs no edit to `setup`.
+
+## The One Architecture Fact
+
+Google publishes aapt2 for linux as an x86_64 binary only. Every Android
+resource task runs it, so on any other host every task downstream of resource
+compilation is unreachable: no APK, no lint, no unit test that needs `R`.
+
+`setup` names that fact once and answers it two ways, both first class:
+
+| Host | Resource toolchain | aapt2 invocation |
+| --- | --- | --- |
+| linux-64 | `native` | executed directly |
+| linux-aarch64 | `emulated` | executed under qemu x86_64 user-mode emulation against an x86_64 sysroot |
+
+Both write one executable to the same path and register it with Gradle through
+`android.aapt2FromMavenOverride` in the isolated `gradle.properties`. Nothing
+downstream branches on architecture, including the commands above: there is no
+flag to pass and nothing to remember differently per machine.
 
 ## Gotchas
 
-- `local.properties` overrides SDK environment variables. Check it first.
-- Google's repository XML is not newest-last. Never select command-line tools
-  with an unsorted `tail` over metadata.
-- The current `android` replacement CLI is x86-64. It fails to execute on
-  aarch64 even though Java-based `sdkmanager` works there.
-- `aapt2` is x86-64. ARM64 can compile and test `:domain`, not package `:app`.
-- `--no-daemon` still creates a single-use Gradle daemon. Its files remain under
-  the isolated Gradle home.
-- `/tmp` is ephemeral. Reboot or cleanup removes the entire environment by
-  design.
-- Do not add Kotlin to PATH. The Gradle plugin is the compiler source of truth.
+- `local.properties` overrides the SDK environment variables. `setup` rewrites
+  it every run; a stale one from another toolchain root is the first thing that
+  will mislead a build.
+- `micromamba create` replaces a prefix rather than adding to it. Installing two
+  packages into one prefix with two calls silently discards the first. `setup`
+  builds each prefix in a single call for this reason.
+- A conda prefix is not a `JAVA_HOME`. conda-forge's `openjdk` puts the JDK at
+  `<prefix>/lib/jvm` and leaves symlinks in `<prefix>/bin`, so pointing
+  `JAVA_HOME` at the prefix makes `sdkmanager` report an invalid directory.
+- The aapt2 in SDK build-tools is not AGP's aapt2. Its build number differs, so
+  substituting it invites a mismatch against what AGP expects. `setup` fetches
+  the artifact AGP itself resolves.
+- The aapt2 wrapper must write nothing to stdout. AGP speaks the aapt2 daemon
+  protocol over the process's stdin and stdout; one stray line corrupts it.
+- The `android` CLI that replaces `sdkmanager` is an x86-64 binary and will not
+  execute on aarch64. Keep using the Java-based `sdkmanager`; its deprecation
+  warning is expected.
+- Emulated resource tasks are slower than native ones. A full
+  `assembleDebug assembleRelease` takes minutes rather than seconds. Correctness
+  is unaffected.
+- `--no-daemon` still forks a single-use Gradle daemon. Its files stay under the
+  isolated Gradle home.
+- The default root is under `/tmp` and is ephemeral by design. A reboot removes
+  the environment; re-run `setup`.
+- Never add Kotlin to `PATH`. The Gradle plugin pinned in `version-catalog` is
+  the compiler, and a second one on `PATH` will not be used but will confuse
+  diagnosis.

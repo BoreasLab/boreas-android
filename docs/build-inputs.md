@@ -162,15 +162,16 @@ label uniqueness, and the shape of the detail routes. Asserting a rendered
 composable needs a device or Robolectric, and that is a dependency worth deciding
 on rather than acquiring as a side effect of wanting a first test here.
 
-On CI, as of commit `af817af`: `:domain:test` and `:app:testDebugUnitTest` pass,
-`assembleDebug` and `assembleRelease` both produce an APK, and `:domain:lint` is
-clean. `:app:lintDebug` is the remaining gate.
+Every gate runs locally on either architecture. Provision the toolchain with
+`.agents/skills/setup-boreas-android/setup.sh` and run the four commands it
+prints: `:domain:test` and `:app:testDebugUnitTest`, `assembleDebug` and
+`assembleRelease`, `:app:lintDebug` and `:domain:lint`, and the design gate.
 
-Those four cannot run on this development host, so CI is where they first
-execute. The host is `aarch64` and Google publishes `aapt2` for `linux` as an
-`x86_64` binary only, so `processDebugResources` cannot start its daemon and
-every task downstream of resource compilation is unreachable here. `actionlint`
-is the same story: the release archive is `linux_amd64`.
+That was not always true. Google publishes `aapt2` for `linux` as an `x86_64`
+binary only, so on `aarch64` every task downstream of resource compilation was
+unreachable and CI was the first place lint or an APK existed. The setup script
+now runs the same aapt2 under x86_64 user-mode emulation and registers it
+through `android.aapt2FromMavenOverride`, so the commands are identical on both
+architectures and neither is the retrofitted one.
 
-Nothing about the project is arm-specific. Run `./gradlew :app:assembleDebug` on
-an `x86_64` host to produce an APK.
+`actionlint` remains x86_64-only and runs in CI.
