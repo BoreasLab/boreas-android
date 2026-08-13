@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Nothing leaves this device.
+
+  From Android 12 `android:allowBackup` no longer governs device-to-device
+  transfer, so setting it to false covers cloud backup and leaves the transfer
+  path open. This file closes both, and closes them by naming every domain rather
+  than by omission: a domain that is not mentioned is included, so an empty
+  section would have exported everything.
+
+  What is at stake is small but it is the wrong kind of small. The stored set is
+  the tunnel draft, the policy, and the per-app exclusion list, and that last one
+  is a list of the apps someone chose to route around a privacy tool. It is not
+  data to hand to a backup transport or to copy onto a new phone unasked.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+        <exclude domain="device_root" />
+        <exclude domain="device_file" />
+        <exclude domain="device_database" />
+        <exclude domain="device_sharedpref" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+        <exclude domain="device_root" />
+        <exclude domain="device_file" />
+        <exclude domain="device_database" />
+        <exclude domain="device_sharedpref" />
+    </device-transfer>
+</data-extraction-rules>

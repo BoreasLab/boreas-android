@@ -67,6 +67,17 @@ android {
         // A baseline would turn today's findings into permanent exemptions. There
         // is no baseline file, and adding one needs a reason recorded here.
         baseline = null
+
+        // The one exemption, named rather than absorbed by a baseline.
+        //
+        // OldTargetApi wants targetSdk raised to compileSdk. Holding it one behind
+        // is the decision recorded in docs/build-inputs.md: compiling against a
+        // newer API is not the same as opting in to its runtime behavior changes,
+        // and for a VPN service those changes reach the foreground-service and
+        // background-execution rules the tunnel's whole lifecycle rests on. There
+        // is no device here to observe them on. Raise targetSdk with a device
+        // result attached and delete this line in the same commit.
+        disable += "OldTargetApi"
     }
 
     packaging {

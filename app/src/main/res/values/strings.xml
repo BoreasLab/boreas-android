@@ -84,7 +84,6 @@
     <!-- Policy. Owned by the engine; this screen only chooses values. -->
     <string name="policy_intro">The engine decides what happens to every packet. These choices are handed to it when a session starts.</string>
     <string name="policy_group_filtering">Filtering</string>
-    <string name="policy_profile">Rule profile</string>
     <string name="policy_profile_off">Off</string>
     <string name="policy_profile_off_detail">Packets pass through unchanged. Useful for isolating whether Boreas is involved in a problem.</string>
     <string name="policy_profile_standard">Standard</string>
@@ -98,7 +97,6 @@
     <string name="policy_tls_blocked">Install the certificate first under Settings, then Certificate.</string>
 
     <string name="policy_group_egress">Egress</string>
-    <string name="policy_egress">Upstream route</string>
     <string name="policy_egress_direct">Direct</string>
     <string name="policy_egress_direct_detail">The engine opens its own sockets. Each one is bypassed around the tunnel before it connects.</string>
     <string name="policy_egress_proxy">Through a proxy</string>
@@ -158,7 +156,10 @@
     <string name="apps_title">Apps</string>
     <string name="apps_intro">By default every app uses the tunnel. Turn one off to send its traffic straight to the network.</string>
     <string name="apps_search">Search apps</string>
-    <string name="apps_excluded_count">%1$d excluded</string>
+    <plurals name="apps_excluded_count">
+        <item quantity="one">%1$d app excluded</item>
+        <item quantity="other">%1$d apps excluded</item>
+    </plurals>
     <string name="apps_none_excluded">Every app uses the tunnel</string>
     <string name="apps_empty_title">No apps to list</string>
     <string name="apps_empty_detail">Boreas could not read the installed app list.</string>

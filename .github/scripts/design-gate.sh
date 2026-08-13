@@ -106,13 +106,21 @@ report 'copy lives in strings.xml' 'no literal sentence passed to Text()' \
 
 # A declared string nothing references is either dead copy or a screen that was
 # never finished. Manifest and other resources count as references.
+#
+# The match is anchored, not a substring. `grep -F "R.string.policy_profile"` is
+# satisfied by `R.string.policy_profile_off`, so every name that happens to be a
+# prefix of another looked used and two dead strings survived this check until
+# lint's UnusedResources found them. `\b` after the name is enough because a
+# resource name is word characters throughout: it cannot match inside a longer
+# name, since the character that would follow is `_` or a letter.
 unreferenced() {
-  local name
-  while IFS= read -r name; do
-    grep -rqF "R.string.$name" app/src --include='*.kt' && continue
-    grep -rqF "@string/$name" app/src --include='*.xml' && continue
-    printf '%s: %s\n' "$STRINGS" "$name"
-  done < <(grep -oP '(?<=<string name=")[^"]+' "$STRINGS")
+  local kind name
+  while IFS=' ' read -r kind name; do
+    grep -rqE "R\.$kind\.$name\b" app/src --include='*.kt' && continue
+    grep -rqE "@$kind/$name\b" app/src --include='*.xml' && continue
+    printf '%s: %s/%s\n' "$STRINGS" "$kind" "$name"
+  done < <(grep -oE '<(string|plurals) name="[^"]+"' "$STRINGS" |
+    sed -E 's/^<([a-z]+) name="([^"]+)"$/\1 \2/')
 }
 report 'no unreferenced strings' 'every declared string is used' < <(unreferenced)
 

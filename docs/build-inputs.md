@@ -12,7 +12,7 @@ value here with the reason, not silently in a build file.
 | Gradle | 9.7.0 | Required by AGP 9.3. Wrapper is committed. |
 | Compose BOM | 2026.08.00 | Resolves Compose UI 1.12.0 and Material 3 1.4.0. |
 | `compileSdk` | 37 | Compose 1.12 requires it. Compiling against newer APIs is separate from opting in to new runtime behavior. |
-| `targetSdk` | 36 | Held one behind deliberately. [Verified inputs](verified-inputs.md) records foreground-service behavior for the target SDK as unverified until device work; raise this with a device result attached, not before. |
+| `targetSdk` | 36 | Held one behind deliberately. Compiling against a newer API is not the same as opting in to its runtime behavior changes, and for a VPN service those changes reach the foreground-service and background-execution rules the whole lifecycle rests on. There is no device to observe them on; raise this with a device result attached, not before. Lint's `OldTargetApi` is disabled for exactly this, named in `app/build.gradle.kts` rather than absorbed by a baseline. |
 | `minSdk` | 29 | Derived from a requirement rather than taste: `VpnService.isAlwaysOn()` and `isLockdownEnabled()` arrive at 29, and below it always-on state cannot be read at all. Raising the floor deletes a whole "cannot know" variant from the model instead of guarding it. |
 | JVM target | 17 | Both modules. |
 | Application id | `org.joefang.boreas.android` | The installed identity, kept separate from the `namespace` `dev.boreaslab.boreas`, which stays a code-organization concern naming the Kotlin package. |
@@ -46,6 +46,7 @@ instead of a convention someone has to notice in review.
 | `explicitApi()` | `:domain` only | Every declaration states its visibility and its return type, so what is public is a decision rather than a default and an edited body cannot silently change a published signature. Not applied to `:app`: it is an application rather than a published surface, and every `@Composable` would have to write out `: Unit` for no reader's benefit. |
 | `lint { warningsAsErrors, abortOnError, checkTestSources }` | both modules | Same rule for the tool that sees what the compiler cannot. `:domain` applies `com.android.lint` for this: without it `:app`'s `checkDependencies` reports that it "will treat :domain as an external dependency and not analyze it", which quietly excluded half the source tree. |
 | `lint { baseline = null }` | both modules | A baseline converts today's findings into permanent exemptions. Adding one needs a reason recorded here. |
+| `lint { disable += "OldTargetApi" }` | `:app` | The only exemption, and it is one check rather than a snapshot of every finding. See the `targetSdk` row above; delete it in the same commit that raises `targetSdk`. |
 
 Report format is not configured: AGP 9 always writes the text, HTML, and XML
 reports and has deprecated the switches that used to select them, so CI prints
@@ -143,6 +144,13 @@ mutable flow, copy living in `strings.xml`, and no unreferenced string. The
 accessibility floor is deliberately not there: it is a law over the palette and
 runs as `ContrastLawTest` in `:domain`.
 
+The unreferenced-string check overlaps lint's `UnusedResources` on purpose: it
+needs no toolchain, so it answers in seconds while the build is still
+provisioning. The overlap is also how the check got fixed. It matched names as
+substrings, so `R.string.policy_profile_off` satisfied a search for
+`policy_profile` and two dead strings passed it until lint found them; the match
+is anchored now.
+
 ## Build verification status
 
 `:domain:test` (38 tests), `:domain:compileKotlin` under `explicitApi()`, and
@@ -154,13 +162,15 @@ label uniqueness, and the shape of the detail routes. Asserting a rendered
 composable needs a device or Robolectric, and that is a dependency worth deciding
 on rather than acquiring as a side effect of wanting a first test here.
 
-Four things cannot run on this host and CI is where they first execute:
-`:app:testDebugUnitTest`, `:app:lintDebug`, `assembleDebug`, and
-`assembleRelease`. The build host is
-`aarch64` and Google publishes `aapt2` for `linux` as an `x86_64` binary only, so
-`processDebugResources` cannot start its daemon and every task downstream of
-resource compilation is unreachable here. `actionlint` is the same story: the
-release archive is `linux_amd64`.
+On CI, as of commit `af817af`: `:domain:test` and `:app:testDebugUnitTest` pass,
+`assembleDebug` and `assembleRelease` both produce an APK, and `:domain:lint` is
+clean. `:app:lintDebug` is the remaining gate.
+
+Those four cannot run on this development host, so CI is where they first
+execute. The host is `aarch64` and Google publishes `aapt2` for `linux` as an
+`x86_64` binary only, so `processDebugResources` cannot start its daemon and
+every task downstream of resource compilation is unreachable here. `actionlint`
+is the same story: the release archive is `linux_amd64`.
 
 Nothing about the project is arm-specific. Run `./gradlew :app:assembleDebug` on
 an `x86_64` host to produce an APK.

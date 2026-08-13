@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import dev.boreaslab.boreas.R
@@ -79,7 +80,7 @@ fun AppsScreen(
             text = if (excluded.isEmpty()) {
                 stringResource(R.string.apps_none_excluded)
             } else {
-                stringResource(R.string.apps_excluded_count, excluded.size)
+                pluralStringResource(R.plurals.apps_excluded_count, excluded.size, excluded.size)
             },
             style = BoreasTheme.type.label,
             color = BoreasTheme.colors.muted,

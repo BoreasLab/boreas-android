@@ -32,20 +32,21 @@
       The foreground-service type declared on the service below. Google lists VPN
       apps, meaning those configured under Settings > Network & Internet > VPN, as
       eligible for the systemExempted type, and from API 34 startForeground() throws
-      MissingForegroundServiceTypeException without a declared type. The permission
-      arrives at API 34, so it is scoped to those versions rather than requested on
-      every device that installs this build.
+      MissingForegroundServiceTypeException without a declared type.
+
+      Both of these arrive after this app's minSdk and are declared unconditionally
+      anyway. <uses-permission> takes android:maxSdkVersion and not a minimum, so
+      narrowing them to the versions that define them is not something the manifest
+      can express: a platform that does not know a permission name ignores it, which
+      is the behavior the narrowing was reaching for.
     -->
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED"
-        android:minSdkVersion="34" />
-    <uses-permission
-        android:name="android.permission.POST_NOTIFICATIONS"
-        android:minSdkVersion="33" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".BoreasApplication"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
