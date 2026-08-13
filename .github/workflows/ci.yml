@@ -1,16 +1,33 @@
-# Build the artifact and assert the properties that must hold before it ships.
+# Continuous integration for the Android control surface.
 #
-# Two jobs, deliberately. `gate` needs no toolchain and finishes in well under a
-# minute, so a punctuation slip or a stray hex literal reports back before the
-# Android build has finished provisioning. `build` is the long one. They share no
-# data, so there is no `needs:` edge between them: an edge would serialize two
-# independent checks and hide the second failure behind the first.
+# Three effect domains, so three jobs, and no `needs:` edge between any of them.
+# None consumes another's output, and running all three means one push reports
+# three results instead of hiding the second and third behind the first.
 #
-# Privilege: the workflow default is no capability at all, and each job asks for
-# exactly what its effects require, which here is never more than reading the
-# repository. Nothing publishes, comments, or writes. Every third-party action is
-# pinned to a full commit SHA, because a tag is a mutable pointer and pinning to
-# one means the build is not reproducible and its supply chain is not fixed.
+#   gate       Properties of the source that no test inside the program can
+#              see: punctuation, one source of truth per scale, one icon
+#              family, no catch-all over a sealed hierarchy. Needs no
+#              toolchain, so it answers while the build is still provisioning.
+#
+#   build      The laws that hold without a device, then the artifact. :domain
+#              carries no Android type, so its lifecycle state machine, its
+#              parsing boundary, and the palette's contrast floor all run on a
+#              plain JVM. Also the boundary check: an Android import creeping
+#              into :domain fails here, because the module has no Android
+#              classpath to resolve it against.
+#
+#   workflows  The workflows themselves, which are code that runs with the
+#              repository checked out.
+#
+# Assertions about the tunnel itself belong to the phases that build it. When
+# the packet engine lands, its fixtures join `build`, and the device matrix in
+# docs/platform-integration.md runs where real hardware is.
+#
+# Every action here is GitHub's own, at a major tag: see .github/zizmor.yml for
+# why that is the policy for actions/* and a hash for everyone else. No
+# third-party action appears at all. Where an outside tool is needed it is
+# fetched by exact version and checked against a digest, which is a stronger
+# guarantee than pinning an action that could do anything once it runs.
 
 name: CI
 
@@ -18,38 +35,37 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+  workflow_dispatch:
 
+# No ambient capability. Each job asks for exactly what it needs, and none of
+# them needs more than read.
 permissions: {}
 
 concurrency:
-  # Only the latest run of a branch matters, but a push to main is a record worth
-  # keeping, so cancellation applies to pull requests only.
   group: ci-${{ github.ref }}
+  # Only the newest run of a branch under review is interesting; a push to the
+  # default branch is a record and is allowed to finish.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   gate:
-    name: Design and workflow gate
+    name: Design gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - name: Check out
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@v7
         with:
+          # The job reads the tree and writes nothing back, so it has no use
+          # for a credential in the local git config.
           persist-credentials: false
-
-      - name: Lint the workflows and their embedded shell
-        uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
-        with:
-          fail-on-error: true
-
-      - name: Lint the scripts
-        run: shellcheck --severity=style ci/*.sh
+          submodules: false
 
       - name: Assert design properties
-        run: ./ci/design-gate.sh
+        shell: bash
+        run: ./.github/scripts/design-gate.sh
 
   build:
     name: Test and build
@@ -58,63 +74,109 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Check out
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          submodules: false
 
-      - name: Set up JDK
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
-      # The wrapper jar is executable code committed to the repository. Validating
-      # it against Gradle's published checksums is what stops a tampered jar from
-      # running with the build's privileges.
-      - name: Validate the Gradle wrapper
-        uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+      # The wrapper jar is executable code in the repository and the build runs
+      # it with this job's privileges. Verified against the checksum Gradle
+      # publishes for the version the properties file declares.
+      - name: Verify the Gradle wrapper
+        shell: bash
+        run: ./.github/scripts/gradle-wrapper.sh
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+      # The key names exactly what invalidates the cache: the declared
+      # dependency versions and the wrapper. restore-keys allows a stale hit
+      # from the same wrapper, which is a warm start rather than a wrong one.
+      - name: Cache Gradle
+        uses: actions/cache@v6
         with:
-          # Only main writes the shared cache, so a pull request cannot poison what
-          # later builds restore.
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: >-
+            gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties',
+            'gradle/libs.versions.toml', '**/*.gradle.kts') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
 
       - name: Install the Android SDK packages this build compiles against
-        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
-        with:
-          packages: 'platforms;android-37.0 build-tools;37.0.0'
+        shell: bash
+        run: ./.github/scripts/android-sdk.sh 'platforms;android-37.0' 'build-tools;37.0.0'
 
-      # The lifecycle state machine, the parsing boundary, and the contrast floor.
-      # These run on a plain JVM because :domain holds no Android type.
       - name: Test the pure module
+        shell: bash
         run: ./gradlew --no-daemon :domain:test
 
       - name: Lint the Android module
+        shell: bash
         run: ./gradlew --no-daemon :app:lintDebug
 
       - name: Build the artifact
+        shell: bash
         run: ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
 
-      - name: Upload the APKs
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+      # Unsigned, and built from a dependency set no release gate has admitted.
+      # This is a build output for inspection, not a release candidate, and the
+      # retention window says so.
+      - name: Upload unsigned APKs
+        uses: actions/upload-artifact@v7
         with:
-          name: apk-${{ github.sha }}
+          name: boreas-android-unsigned
           path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
       # Reports are most useful exactly when the steps above failed.
       - name: Upload test and lint reports
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        uses: actions/upload-artifact@v7
         with:
-          name: reports-${{ github.sha }}
+          name: reports
           path: |
             domain/build/reports/tests/**
             domain/build/test-results/**
             app/build/reports/lint-results-*.html
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 7
+
+  workflows:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: false
+
+      # Fetched by exact version and verified against a checksum recorded here,
+      # so this step cannot be changed by anything happening upstream. It also
+      # ShellChecks the run: blocks above and the scripts they call.
+      - name: Run actionlint
+        shell: bash
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: ./.github/scripts/actionlint.sh
+
+      - name: ShellCheck the scripts
+        shell: bash
+        run: shellcheck --severity=style .github/scripts/*.sh
+
+      # zizmor reads workflows for the failure modes actionlint does not model:
+      # excessive permissions, unpinned actions, credential persistence, and
+      # untrusted interpolation into a shell.
+      - name: Run zizmor
+        shell: bash
+        env:
+          ZIZMOR_VERSION: 1.29.0
+        run: ./.github/scripts/zizmor.sh
