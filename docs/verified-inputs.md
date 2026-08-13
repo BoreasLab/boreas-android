@@ -11,6 +11,33 @@ replace device testing for Boreas-specific behavior.
 | `detachFd()` transfers close responsibility to native code | [`ParcelFileDescriptor.detachFd`](https://developer.android.com/reference/android/os/ParcelFileDescriptor#detachFd()): "You are now responsible for closing the fd in native." | Use a one-shot Kotlin-to-Rust ownership move. |
 | UniFFI includes Kotlin support | [Mozilla UniFFI](https://github.com/mozilla/uniffi-rs/blob/main/README.md): "UniFFI comes with support for Kotlin..." | It may generate Kotlin control/value bindings; it does not define descriptor ownership. |
 
+## Always-On VPN
+
+Checked on 2026-08-13 against the installed SDK platform (`android-37.0`)
+rather than prose alone: constant values come from `android.jar`, and every
+API level below is the `since` attribute recorded in the platform's own
+`data/api-versions.xml`.
+
+| Input | Evidence | Implementation consequence |
+|---|---|---|
+| `VpnService.isAlwaysOn()` and `isLockdownEnabled()` exist from API 29 | `api-versions.xml`: `since="29"` for both | `minSdk` is 29, so always-on state is readable with no version branch and no unknown case to model. |
+| The meta-data key is `android.net.VpnService.SUPPORTS_ALWAYS_ON` | `android.jar` constant, `SERVICE_META_DATA_SUPPORTS_ALWAYS_ON`, present from API 27 | Declared explicitly in the manifest. |
+| The field "defaults to true if absent. It will only have effect on O_MR1 or higher" | [AOSP `VpnService.java`](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/android/net/VpnService.java) javadoc | The declaration records existing behavior rather than changing it. |
+| Always-on mode means "the system ensures that the service is always running by restarting it when necessary" | AOSP `VpnService.java` javadoc for `isAlwaysOn()` | `onStartCommand` returns `START_STICKY` under always-on and `START_NOT_STICKY` otherwise, and `Dismiss` does not `stopSelf()` while always-on is on. |
+| Lockdown means the system "ensures that the service is always running and that the apps aren't allowed to bypass the VPN" | AOSP `VpnService.java` javadoc for `isLockdownEnabled()` | The Apps screen states that an excluded app gets no network at all while the tunnel is down. |
+| "The Android system starts a VPN in the background by calling `startService()`" | [Android Developers, VPN guide](https://developer.android.com/develop/connectivity/vpn) | The service receives an Intent carrying none of our actions, and a sticky restart redelivers `null`. Both are parsed as a start request, but only while `isAlwaysOn` is true. |
+| Only a device or profile owner can set always-on programmatically | `DevicePolicyManager.setAlwaysOnVpnPackage`, `api-versions.xml` `since="24"` | The app reports state and deep-links to `Settings.ACTION_VPN_SETTINGS` (`since="24"`); it never offers a control it cannot honor. |
+| From API 30 an app sees only packages it declares an interest in | [Android Developers, package visibility](https://developer.android.com/training/package-visibility) | A narrow `<queries>` element for launcher activities, not `QUERY_ALL_PACKAGES`. |
+
+### Still unverified for always-on
+
+- Whether a foreground-service type is required for a `VpnService` at the
+  selected target SDK, on the selected vendor set.
+- Behavior when always-on is enabled while the packet engine is absent: the
+  system will start the service, and the service will reach `Failed`. The
+  resulting user-visible outcome has not been observed on a device.
+- Interaction between lockdown and the per-app exclusion list on real devices.
+
 ## Explicitly Unverified Until Device Work
 
 - Vendor and Android-version behavior of user-store CA trust and WebView.

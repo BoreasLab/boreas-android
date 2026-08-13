@@ -1,0 +1,120 @@
+# Build the artifact and assert the properties that must hold before it ships.
+#
+# Two jobs, deliberately. `gate` needs no toolchain and finishes in well under a
+# minute, so a punctuation slip or a stray hex literal reports back before the
+# Android build has finished provisioning. `build` is the long one. They share no
+# data, so there is no `needs:` edge between them: an edge would serialize two
+# independent checks and hide the second failure behind the first.
+#
+# Privilege: the workflow default is no capability at all, and each job asks for
+# exactly what its effects require, which here is never more than reading the
+# repository. Nothing publishes, comments, or writes. Every third-party action is
+# pinned to a full commit SHA, because a tag is a mutable pointer and pinning to
+# one means the build is not reproducible and its supply chain is not fixed.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  # Only the latest run of a branch matters, but a push to main is a record worth
+  # keeping, so cancellation applies to pull requests only.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    name: Design and workflow gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Lint the workflows and their embedded shell
+        uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
+        with:
+          fail-on-error: true
+
+      - name: Lint the scripts
+        run: shellcheck --severity=style ci/*.sh
+
+      - name: Assert design properties
+        run: ./ci/design-gate.sh
+
+  build:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # The wrapper jar is executable code committed to the repository. Validating
+      # it against Gradle's published checksums is what stops a tampered jar from
+      # running with the build's privileges.
+      - name: Validate the Gradle wrapper
+        uses: gradle/actions/wrapper-validation@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        with:
+          # Only main writes the shared cache, so a pull request cannot poison what
+          # later builds restore.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Install the Android SDK packages this build compiles against
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: 'platforms;android-37.0 build-tools;37.0.0'
+
+      # The lifecycle state machine, the parsing boundary, and the contrast floor.
+      # These run on a plain JVM because :domain holds no Android type.
+      - name: Test the pure module
+        run: ./gradlew --no-daemon :domain:test
+
+      - name: Lint the Android module
+        run: ./gradlew --no-daemon :app:lintDebug
+
+      - name: Build the artifact
+        run: ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
+
+      - name: Upload the APKs
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: apk-${{ github.sha }}
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      # Reports are most useful exactly when the steps above failed.
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: reports-${{ github.sha }}
+          path: |
+            domain/build/reports/tests/**
+            domain/build/test-results/**
+            app/build/reports/lint-results-*.html
+          if-no-files-found: ignore
+          retention-days: 14
