@@ -49,8 +49,37 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    /**
+     * Lint reports every issue it finds, and every issue it finds fails the build.
+     *
+     * A warning is a defect the tool already located. Left as a warning it survives
+     * one review, and after that nobody reads the list at all.
+     *
+     * The report format is not configured here. AGP 9 always writes the text, HTML,
+     * and XML reports and deprecates the switches that used to select them, so CI
+     * prints the text report from disk instead. See .github/workflows/ci.yml.
+     */
+    lint {
+        warningsAsErrors = true
+        abortOnError = true
+        checkDependencies = true
+        checkTestSources = true
+        // A baseline would turn today's findings into permanent exemptions. There
+        // is no baseline file, and adding one needs a reason recorded here.
+        baseline = null
+    }
+
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+}
+
+kotlin {
+    compilerOptions {
+        // Same rule as :domain. explicitApi is deliberately absent: this module is
+        // an application rather than a published surface, and every @Composable
+        // would have to write out `: Unit` for no reader's benefit.
+        allWarningsAsErrors.set(true)
     }
 }
 

@@ -11,35 +11,35 @@ package dev.boreaslab.boreas.model
  */
 
 /** A validated result, or the one problem that stopped it validating. */
-sealed interface Parsed<out T> {
-    data class Valid<T>(val value: T) : Parsed<T>
-    data class Invalid(val problem: FieldProblem) : Parsed<Nothing>
+public sealed interface Parsed<out T> {
+    public data class Valid<T>(val value: T) : Parsed<T>
+    public data class Invalid(val problem: FieldProblem) : Parsed<Nothing>
 }
 
 /** Every way a field can be wrong. The UI maps each to copy naming the fix. */
-sealed interface FieldProblem {
-    data object Required : FieldProblem
-    data object AddressShape : FieldProblem
-    data object AddressRange : FieldProblem
-    data object MtuShape : FieldProblem
-    data object MtuRange : FieldProblem
-    data class DnsShape(val entry: String) : FieldProblem
+public sealed interface FieldProblem {
+    public data object Required : FieldProblem
+    public data object AddressShape : FieldProblem
+    public data object AddressRange : FieldProblem
+    public data object MtuShape : FieldProblem
+    public data object MtuRange : FieldProblem
+    public data class DnsShape(val entry: String) : FieldProblem
 }
 
 /** Fields the tunnel form can report a problem against. */
-enum class TunnelField { Address, Mtu, Dns }
+public enum class TunnelField { Address, Mtu, Dns }
 
 @JvmInline
-value class Ipv4Address private constructor(val text: String) {
-    override fun toString() = text
+public value class Ipv4Address private constructor(public val text: String) {
+    override fun toString(): String = text
 
-    companion object {
+    public companion object {
         /**
          * Parses liberally. Surrounding whitespace, a stray leading or trailing dot,
          * and zero padding are all normalized rather than rejected, because
          * reformatting is the system's job and not the reader's.
          */
-        fun parse(raw: String): Parsed<Ipv4Address> {
+        public fun parse(raw: String): Parsed<Ipv4Address> {
             val trimmed = raw.trim().trim('.')
             if (trimmed.isEmpty()) return Parsed.Invalid(FieldProblem.Required)
 
@@ -47,7 +47,16 @@ value class Ipv4Address private constructor(val text: String) {
             if (parts.size != 4 || parts.any { it.isEmpty() || !it.all(Char::isDigit) }) {
                 return Parsed.Invalid(FieldProblem.AddressShape)
             }
-            val numbers = parts.map { it.toIntOrNull() ?: return Parsed.Invalid(FieldProblem.AddressShape) }
+
+            // Every part is now known to be a non-empty run of digits, so the only
+            // remaining way to be wrong is to be too large. Length is checked before
+            // conversion because "99999999999" overflows Int: converting first would
+            // report a well-formed but oversized octet as a shape problem, and send
+            // the reader to fix punctuation that was never wrong.
+            if (parts.any { it.trimStart('0').length > 3 }) {
+                return Parsed.Invalid(FieldProblem.AddressRange)
+            }
+            val numbers = parts.map(String::toInt)
             if (numbers.any { it > 255 }) return Parsed.Invalid(FieldProblem.AddressRange)
 
             return Parsed.Valid(Ipv4Address(numbers.joinToString(".")))
@@ -56,13 +65,13 @@ value class Ipv4Address private constructor(val text: String) {
 }
 
 @JvmInline
-value class Mtu private constructor(val bytes: Int) {
-    companion object {
-        const val MINIMUM = 1280
-        const val MAXIMUM = 9000
+public value class Mtu private constructor(public val bytes: Int) {
+    public companion object {
+        public const val MINIMUM: Int = 1280
+        public const val MAXIMUM: Int = 9000
 
         /** Accepts digit grouping and surrounding whitespace, for example " 1,500 ". */
-        fun parse(raw: String): Parsed<Mtu> {
+        public fun parse(raw: String): Parsed<Mtu> {
             val cleaned = raw.trim().replace(",", "").replace(" ", "")
             if (cleaned.isEmpty()) return Parsed.Invalid(FieldProblem.Required)
 
@@ -80,13 +89,13 @@ value class Mtu private constructor(val bytes: Int) {
  * Kept as raw text so a half-typed value is never destroyed by validation, and so
  * the entry survives navigation and process death unchanged.
  */
-data class TunnelDraft(
+public data class TunnelDraft(
     val address: String = "10.24.0.2",
     val mtu: String = "1500",
     val dns: String = "",
 ) {
-    companion object {
-        fun of(config: PlatformConfig) = TunnelDraft(
+    public companion object {
+        public fun of(config: PlatformConfig): TunnelDraft = TunnelDraft(
             address = config.address.text,
             mtu = config.mtu.bytes.toString(),
             dns = config.dnsServers.joinToString("\n") { it.text },
@@ -103,24 +112,24 @@ data class TunnelDraft(
  * exhaustively and a trusted [PlatformConfig] exists only on the branch that has
  * one.
  */
-sealed interface TunnelParse {
+public sealed interface TunnelParse {
 
-    data class Valid(val config: PlatformConfig) : TunnelParse
+    public data class Valid(val config: PlatformConfig) : TunnelParse
 
-    data class Invalid(val problems: Map<TunnelField, FieldProblem>) : TunnelParse {
+    public data class Invalid(val problems: Map<TunnelField, FieldProblem>) : TunnelParse {
         init {
             require(problems.isNotEmpty()) { "an invalid parse must name at least one problem" }
         }
     }
 
-    companion object {
-        fun of(draft: TunnelDraft, excludedPackages: Set<String>): TunnelParse =
+    public companion object {
+        public fun of(draft: TunnelDraft, excludedPackages: Set<String>): TunnelParse =
             PlatformConfig.parse(draft, excludedPackages)
     }
 }
 
 /** The problems for a field, or null when that field parsed. */
-fun TunnelParse.problemFor(field: TunnelField): FieldProblem? = when (this) {
+public fun TunnelParse.problemFor(field: TunnelField): FieldProblem? = when (this) {
     is TunnelParse.Valid -> null
     is TunnelParse.Invalid -> problems[field]
 }
@@ -132,14 +141,14 @@ fun TunnelParse.problemFor(field: TunnelField): FieldProblem? = when (this) {
  * docs/implementation-plan.md and needs a device gate, so it is not exposed as a
  * control that would imply it had been tested.
  */
-data class PlatformConfig(
+public data class PlatformConfig(
     val address: Ipv4Address,
     val mtu: Mtu,
     val dnsServers: List<Ipv4Address>,
     val excludedPackages: Set<String>,
 ) {
-    companion object {
-        fun parse(draft: TunnelDraft, excludedPackages: Set<String>): TunnelParse {
+    public companion object {
+        public fun parse(draft: TunnelDraft, excludedPackages: Set<String>): TunnelParse {
             val problems = mutableMapOf<TunnelField, FieldProblem>()
 
             val address = when (val r = Ipv4Address.parse(draft.address)) {
@@ -178,7 +187,7 @@ data class PlatformConfig(
 }
 
 /** How much the engine acts on what it sees. */
-enum class RuleProfile { Off, Standard, Strict }
+public enum class RuleProfile { Off, Standard, Strict }
 
 /**
  * Policy and egress choices handed to the engine at start.
@@ -187,7 +196,7 @@ enum class RuleProfile { Off, Standard, Strict }
  * to the core FFI crate, so these must be reconciled against the versioned core
  * interface in A2 rather than treated as settled.
  */
-data class EngineConfig(
+public data class EngineConfig(
     val profile: RuleProfile = RuleProfile.Standard,
     val inspectTls: Boolean = false,
     val upstream: UpstreamRoute = UpstreamRoute.Direct,

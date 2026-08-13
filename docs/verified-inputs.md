@@ -29,10 +29,22 @@ API level below is the `since` attribute recorded in the platform's own
 | Only a device or profile owner can set always-on programmatically | `DevicePolicyManager.setAlwaysOnVpnPackage`, `api-versions.xml` `since="24"` | The app reports state and deep-links to `Settings.ACTION_VPN_SETTINGS` (`since="24"`); it never offers a control it cannot honor. |
 | From API 30 an app sees only packages it declares an interest in | [Android Developers, package visibility](https://developer.android.com/training/package-visibility) | A narrow `<queries>` element for launcher activities, not `QUERY_ALL_PACKAGES`. |
 
+## Foreground Service Type
+
+Checked on 2026-08-13. This was previously listed as unverified, and the cost of
+leaving it so was a build failure: `:app:lintDebug` reports `ForegroundServiceType`
+as an error, not a warning, because at `targetSdk` 34 and above the call throws
+rather than degrades.
+
+| Input | Evidence | Implementation consequence |
+|---|---|---|
+| A declared type is mandatory from API 34 | [Android Developers, foreground service types are required](https://developer.android.com/about/versions/14/changes/fgs-types-required): starting a foreground service with no declared type raises `MissingForegroundServiceTypeException` | `android:foregroundServiceType` is declared on the service element. |
+| VPN apps, "configured using Settings > Network & Internet > VPN", are eligible for `systemExempted` | [Android Developers, foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types) | `systemExempted`, not `specialUse`. `specialUse` is the residual bucket for cases the named types miss, and it carries a Play Console review of a free-text justification; this case is named. |
+| `FOREGROUND_SERVICE_SYSTEM_EXEMPTED` arrives at API 34 | `api-versions.xml`: `since="34"` for the permission constant, matching `ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED` in `android.jar` | The `<uses-permission>` carries `android:minSdkVersion="34"`, so it is not requested on devices where it does not exist. |
+| `POST_NOTIFICATIONS` is a runtime permission from API 33 | `api-versions.xml`: `since="33"` | The app requests it when the reader first starts the tunnel. Without the grant the foreground notification is suppressed, so the tunnel would run with nothing on screen saying so. |
+
 ### Still unverified for always-on
 
-- Whether a foreground-service type is required for a `VpnService` at the
-  selected target SDK, on the selected vendor set.
 - Behavior when always-on is enabled while the packet engine is absent: the
   system will start the service, and the service will reach `Failed`. The
   resulting user-visible outcome has not been observed on a device.
@@ -41,8 +53,10 @@ API level below is the `since` attribute recorded in the platform's own
 ## Explicitly Unverified Until Device Work
 
 - Vendor and Android-version behavior of user-store CA trust and WebView.
-- Exact foreground-service and background-restriction behavior for the selected
-  target SDK.
+- Whether a vendor image accepts `systemExempted` for this app. The type is
+  declared per Google's documented eligibility; whether a given OEM's
+  foreground-service policy agrees has not been observed on hardware.
+- Background-restriction behavior for the selected target SDK.
 - Socket bypass behavior for the actual native runtime and egress transports.
 - Device battery, wakeup, memory, throughput and network-transition behavior.
 

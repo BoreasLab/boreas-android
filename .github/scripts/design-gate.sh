@@ -79,8 +79,25 @@ report 'one icon family' 'ImageVector.Builder only in Icons.kt' \
 # into a blank region at runtime.
 report 'closed sets have no catch-all' 'no else -> over a sealed hierarchy' \
   < <(scan -nE -A30 'when \((val )?[a-zA-Z_.]+\) \{' |
-    grep -E 'VpnLifecycleState|TypedFailure|ContainerState|TunnelParse|AlwaysOn|ServiceRequest' -A20 |
+    grep -E 'VpnLifecycleState|TypedFailure|ContainerState|TunnelParse|AlwaysOn|ServiceRequest|ForegroundIntent|FieldProblem' -A20 |
     grep -E '^[^ ]+[-:][0-9]+[-:][[:space:]]*else ->' || true)
+
+# Observable state is one cell with one writer, and both halves of that are now
+# carried by the declaration: a property with an explicit backing field, exposed at
+# a read-only type.
+#
+# What the declaration cannot stop is a reader casting the exposed value back to
+# the mutable type it is at runtime. Under the previous shape an asStateFlow()
+# wrapper made that cast fail; the check below replaces that guarantee, and does it
+# across the whole tree rather than one cell at a time.
+report 'read-only state stays read-only' 'no cast to a Mutable*Flow' \
+  < <(scan -nE '\bas\??[[:space:]]+Mutable(State|Shared)Flow' || true)
+
+# A private mutable property shadowed by a public read-only one is the shape the
+# explicit backing field replaced. Two names for one cell is how a second writer
+# gets added without anyone noticing the rule was broken.
+report 'one name per state cell' 'no _-prefixed shadow property' \
+  < <(scan -nE '\bval _[a-zA-Z]' || true)
 
 # Every user-visible string is a resource, so it is reviewed and translated in one
 # place. A quoted sentence inside a composable is copy nobody will find again.

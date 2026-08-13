@@ -16,12 +16,11 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /** What the surface can ask the session owner to do. A closed set. */
-sealed interface SessionCommand {
-    data class Start(val engine: EngineConfig, val platform: PlatformConfig) : SessionCommand
+public sealed interface SessionCommand {
+    public data class Start(val engine: EngineConfig, val platform: PlatformConfig) : SessionCommand
 
     /**
      * An attempt that failed at the platform boundary before it could start.
@@ -30,9 +29,9 @@ sealed interface SessionCommand {
      * the caller would have to write the failure to the observable state itself,
      * giving that state a second writer that can disagree with this one.
      */
-    data class Reject(val operation: Operation, val failure: TypedFailure) : SessionCommand
+    public data class Reject(val operation: Operation, val failure: TypedFailure) : SessionCommand
 
-    data object Stop : SessionCommand
+    public data object Stop : SessionCommand
 }
 
 /**
@@ -57,16 +56,24 @@ sealed interface SessionCommand {
  * The class holds no Android type, so the whole state machine is unit testable
  * against a fake [EngineHost] and a fake [ConsentGate].
  */
-class SessionController(
+public class SessionController(
     private val engineProvider: suspend () -> EngineHost,
     private val consent: ConsentGate,
     private val scope: CoroutineScope,
 ) {
 
-    private val _state = MutableStateFlow<VpnLifecycleState>(VpnLifecycleState.Stopped)
-
-    /** Bounded latest-state stream. A slow reader sees the newest state, not a backlog. */
-    val state: StateFlow<VpnLifecycleState> = _state.asStateFlow()
+    /**
+     * Bounded latest-state stream. A slow reader sees the newest state, not a backlog.
+     *
+     * An explicit backing field rather than the private-mutable-plus-public-view
+     * pair: there is one cell, so there is one name for it. Inside this class the
+     * compiler sees the mutable type and the writes below type-check; outside, the
+     * property is a read-only [StateFlow] and no caller can be handed a setter.
+     * The single-writer rule is then a fact about the declaration rather than a
+     * convention about an underscore prefix.
+     */
+    public val state: StateFlow<VpnLifecycleState>
+        field = MutableStateFlow<VpnLifecycleState>(VpnLifecycleState.Stopped)
 
     private val commands = Channel<SessionCommand>(
         capacity = 1,
@@ -86,14 +93,14 @@ class SessionController(
                 when (command) {
                     is SessionCommand.Start -> runStart(command)
                     is SessionCommand.Reject ->
-                        _state.value = VpnLifecycleState.Failed(command.operation, command.failure)
+                        state.value = VpnLifecycleState.Failed(command.operation, command.failure)
                     SessionCommand.Stop -> runStop()
                 }
             }
         }
     }
 
-    fun submit(command: SessionCommand) {
+    public fun submit(command: SessionCommand) {
         commands.trySend(command)
     }
 
@@ -109,46 +116,46 @@ class SessionController(
             active = engine
 
             if (!engine.isAvailable) {
-                _state.value =
+                state.value =
                     VpnLifecycleState.Failed(Operation.Start, TypedFailure.EngineUnavailable)
                 return
             }
 
-            _state.value = VpnLifecycleState.AwaitingConsent
+            state.value = VpnLifecycleState.AwaitingConsent
             when (consent.request()) {
                 ConsentOutcome.Granted -> Unit
                 ConsentOutcome.Denied -> {
-                    _state.value =
+                    state.value =
                         VpnLifecycleState.Failed(Operation.Start, TypedFailure.ConsentDenied)
                     return
                 }
                 ConsentOutcome.Unavailable -> {
-                    _state.value =
+                    state.value =
                         VpnLifecycleState.Failed(Operation.Start, TypedFailure.ConsentUnavailable)
                     return
                 }
             }
 
-            _state.value = VpnLifecycleState.Starting
+            state.value = VpnLifecycleState.Starting
 
             // A3 establishes the TUN here and moves the descriptor across in one
             // step. Until a native owner exists there is nothing to detach, so no
             // descriptor is created and none can leak.
             when (val outcome = engine.start(command.engine, command.platform)) {
                 is EngineStart.Started -> {
-                    _state.value =
+                    state.value =
                         VpnLifecycleState.Running(outcome.session, outcome.status, command.engine)
                     followStatus(engine, outcome.session)
                 }
                 is EngineStart.Refused ->
-                    _state.value = VpnLifecycleState.Failed(Operation.Start, outcome.failure)
+                    state.value = VpnLifecycleState.Failed(Operation.Start, outcome.failure)
             }
         } catch (cancellation: CancellationException) {
             // A cancelled start releases what it acquired and reports the resting
             // state, not a failure. Rethrown so the scope stays consistent.
             releaseStatus()
             active = null
-            _state.value = VpnLifecycleState.Stopped
+            state.value = VpnLifecycleState.Stopped
             throw cancellation
         }
     }
@@ -157,7 +164,7 @@ class SessionController(
         // Eliminated exhaustively: a new lifecycle variant must state here whether
         // it owns a session to stop, rather than falling into a catch-all that
         // would silently do nothing.
-        val session = when (val now = _state.value) {
+        val session = when (val now = state.value) {
             is VpnLifecycleState.Running -> now.session
             is VpnLifecycleState.Stopping -> now.session
             // Nothing owns a session, so stopping is already true. The contract
@@ -167,20 +174,20 @@ class SessionController(
             VpnLifecycleState.Starting,
             is VpnLifecycleState.Failed,
             -> {
-                _state.value = VpnLifecycleState.Stopped
+                state.value = VpnLifecycleState.Stopped
                 return
             }
         }
 
         try {
             releaseStatus()
-            _state.value = VpnLifecycleState.Stopping(session)
+            state.value = VpnLifecycleState.Stopping(session)
             active?.stop(session, StopReason.UserRequested)
             active = null
-            _state.value = VpnLifecycleState.Stopped
+            state.value = VpnLifecycleState.Stopped
         } catch (cancellation: CancellationException) {
             active = null
-            _state.value = VpnLifecycleState.Stopped
+            state.value = VpnLifecycleState.Stopped
             throw cancellation
         }
     }
@@ -195,9 +202,9 @@ class SessionController(
         releaseStatus()
         statusJob = scope.launch {
             engine.status(session).collect { status ->
-                val now = _state.value
+                val now = state.value
                 if (now is VpnLifecycleState.Running && now.session == session) {
-                    _state.value = now.copy(status = status)
+                    state.value = now.copy(status = status)
                 }
             }
         }
@@ -208,7 +215,7 @@ class SessionController(
         statusJob = null
     }
 
-    suspend fun shutdown() {
+    public suspend fun shutdown() {
         releaseStatus()
         current?.cancelAndJoin()
         commands.close()

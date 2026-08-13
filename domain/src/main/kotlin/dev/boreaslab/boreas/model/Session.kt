@@ -2,10 +2,10 @@ package dev.boreaslab.boreas.model
 
 /** Identity of one engine session. Opaque to the Android shell. */
 @JvmInline
-value class SessionId(val value: String)
+public value class SessionId(public val value: String)
 
 /** Where the engine sends upstream traffic. Part of EngineConfig, shown as status. */
-enum class UpstreamRoute { Direct, Proxy }
+public enum class UpstreamRoute { Direct, Proxy }
 
 /**
  * An immutable status snapshot.
@@ -18,7 +18,7 @@ enum class UpstreamRoute { Direct, Proxy }
  * reported by an engine. Every screen that shows a counter must show that marker
  * too, so a generated number can never be read as a measured one.
  */
-data class SessionStatus(
+public data class SessionStatus(
     val startedAtMillis: Long,
     val flowsActive: Long,
     val flowsAccepted: Long,
@@ -29,8 +29,12 @@ data class SessionStatus(
     val upstream: UpstreamRoute,
     val simulated: Boolean,
 ) {
-    companion object {
-        fun initial(startedAtMillis: Long, upstream: UpstreamRoute, simulated: Boolean) =
+    public companion object {
+        public fun initial(
+            startedAtMillis: Long,
+            upstream: UpstreamRoute,
+            simulated: Boolean,
+        ): SessionStatus =
             SessionStatus(
                 startedAtMillis = startedAtMillis,
                 flowsActive = 0,

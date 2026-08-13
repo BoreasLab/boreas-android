@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_name">Boreas</string>
 
     <!-- Navigation. Each label matches its screen title exactly. -->
@@ -213,5 +213,16 @@
     <string name="notification_running_simulated">Simulated session</string>
     <string name="notification_starting">Starting the tunnel</string>
     <string name="notification_stopping">Stopping the tunnel</string>
+
+    <!--
+      Announced phrases. A label and its value are read as one sentence rather than
+      two unrelated fragments, and the separator is part of the translation because
+      not every language joins them with a colon.
+    -->
+    <string name="a11y_metric"><xliff:g id="label" example="Bytes in">%1$s</xliff:g>: <xliff:g id="value" example="1.2 MB">%2$s</xliff:g></string>
+    <string name="a11y_metric_captioned"><xliff:g id="label" example="Bytes in">%1$s</xliff:g>: <xliff:g id="value" example="1.2 MB">%2$s</xliff:g>. <xliff:g id="caption" example="Since the session started">%3$s</xliff:g></string>
+
+    <!-- The name the system shows for what was placed on the clipboard. -->
+    <string name="diagnostics_clip_label">Boreas transition log</string>
 
 </resources>

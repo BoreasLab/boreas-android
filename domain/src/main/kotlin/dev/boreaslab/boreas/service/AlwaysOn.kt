@@ -17,15 +17,15 @@ package dev.boreaslab.boreas.service
  * process. Collapsing that into [Off] would let the interface state, as fact,
  * something it has never checked.
  */
-sealed interface AlwaysOn {
+public sealed interface AlwaysOn {
 
-    data object Unobserved : AlwaysOn
+    public data object Unobserved : AlwaysOn
 
-    data object Off : AlwaysOn
+    public data object Off : AlwaysOn
 
     /**
      * @param lockdown when true the system also blocks traffic while the tunnel
      *   is down, so nothing leaves the device unfiltered between sessions.
      */
-    data class On(val lockdown: Boolean) : AlwaysOn
+    public data class On(val lockdown: Boolean) : AlwaysOn
 }

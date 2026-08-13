@@ -99,7 +99,7 @@ fun BoreasNavigationBar(
             tonalElevation = 0.dp,
             windowInsets = WindowInsets.navigationBars,
         ) {
-            Destination.topLevel.forEach { destination ->
+            Destination.TopLevel.entries.forEach { destination ->
                 val selected = current == destination.route
                 val label = stringResource(destination.label)
                 NavigationBarItem(

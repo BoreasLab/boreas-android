@@ -30,14 +30,17 @@ private fun copyFor(alwaysOn: AlwaysOn): AlwaysOnCopy = when (alwaysOn) {
         R.string.always_on_state_off,
         R.string.always_on_state_off_detail,
     )
-    is AlwaysOn.On -> if (alwaysOn.lockdown) {
-        AlwaysOnCopy(
-            R.string.always_on_state_lockdown,
-            R.string.always_on_state_lockdown_detail,
-        )
-    } else {
-        AlwaysOnCopy(R.string.always_on_state_on, R.string.always_on_state_on_detail)
-    }
+    // A guard, so lockdown reads as a fourth case beside the other three rather
+    // than as a conditional nested inside one of them. The unguarded On branch
+    // below keeps the elimination exhaustive.
+    is AlwaysOn.On if alwaysOn.lockdown -> AlwaysOnCopy(
+        R.string.always_on_state_lockdown,
+        R.string.always_on_state_lockdown_detail,
+    )
+    is AlwaysOn.On -> AlwaysOnCopy(
+        R.string.always_on_state_on,
+        R.string.always_on_state_on_detail,
+    )
 }
 
 /**
@@ -50,11 +53,15 @@ private fun copyFor(alwaysOn: AlwaysOn): AlwaysOnCopy = when (alwaysOn) {
  *
  * The state is read from the running service, which is why "not read yet" is a
  * state of its own rather than being shown as "off".
+ *
+ * @param onOpenVpnSettings null on a system image that ships no Activity for the
+ *   VPN settings screen. The card then explains the state and stops there, which is
+ *   the same rule again: a control that cannot work is not shown.
  */
 @Composable
 fun AlwaysOnCard(
     alwaysOn: AlwaysOn,
-    onOpenVpnSettings: () -> Unit,
+    onOpenVpnSettings: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val copy = copyFor(alwaysOn)
@@ -87,13 +94,15 @@ fun AlwaysOnCard(
             color = BoreasTheme.colors.muted,
             modifier = Modifier.padding(top = Space.xs),
         )
-        BoreasButton(
-            label = stringResource(R.string.always_on_open_settings),
-            onClick = onOpenVpnSettings,
-            variant = ButtonVariant.Secondary,
-            icon = BoreasIcons.Globe,
-            modifier = Modifier.padding(top = Space.sm),
-        )
+        if (onOpenVpnSettings != null) {
+            BoreasButton(
+                label = stringResource(R.string.always_on_open_settings),
+                onClick = onOpenVpnSettings,
+                variant = ButtonVariant.Secondary,
+                icon = BoreasIcons.Globe,
+                modifier = Modifier.padding(top = Space.sm),
+            )
+        }
     }
 }
 

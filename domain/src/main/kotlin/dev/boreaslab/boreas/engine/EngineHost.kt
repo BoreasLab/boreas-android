@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.Flow
  *
  * Nothing crossing this seam is a packet. Status, counters, and typed errors only.
  */
-interface EngineHost {
+public interface EngineHost {
 
     /**
      * Whether a session could be started at all.
@@ -35,25 +35,25 @@ interface EngineHost {
      * Checked during validation, before consent, so an unlinked build never asks
      * for VPN permission it cannot use.
      */
-    val isAvailable: Boolean
+    public val isAvailable: Boolean
 
-    suspend fun start(engine: EngineConfig, platform: PlatformConfig): EngineStart
+    public suspend fun start(engine: EngineConfig, platform: PlatformConfig): EngineStart
 
-    suspend fun stop(session: SessionId, reason: StopReason)
+    public suspend fun stop(session: SessionId, reason: StopReason)
 
     /**
      * Bounded latest-status stream for a running session.
      *
      * Latest-value only: a slow reader sees the newest snapshot, never a backlog.
      */
-    fun status(session: SessionId): Flow<SessionStatus>
+    public fun status(session: SessionId): Flow<SessionStatus>
 }
 
 /** The result of asking the engine to start. A closed set. */
-sealed interface EngineStart {
-    data class Started(val session: SessionId, val status: SessionStatus) : EngineStart
-    data class Refused(val failure: TypedFailure) : EngineStart
+public sealed interface EngineStart {
+    public data class Started(val session: SessionId, val status: SessionStatus) : EngineStart
+    public data class Refused(val failure: TypedFailure) : EngineStart
 }
 
 /** Why a session is being stopped. The contract requires a typed reason. */
-enum class StopReason { UserRequested, ConfigurationChanged, NetworkLost, ServiceDestroyed }
+public enum class StopReason { UserRequested, ConfigurationChanged, NetworkLost, ServiceDestroyed }

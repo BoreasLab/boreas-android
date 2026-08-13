@@ -41,6 +41,17 @@ class ConfigParsingTest {
     }
 
     @Test
+    fun `an octet too large for an Int is still a range problem`() {
+        // Every character is a digit, so the shape was never in question. Converting
+        // before checking length reported this as a shape problem and sent the
+        // reader to fix punctuation that was already correct.
+        assertEquals(FieldProblem.AddressRange, problemOf(Ipv4Address.parse("10.0.0.99999999999")))
+        assertEquals(FieldProblem.AddressRange, problemOf(Ipv4Address.parse("2147483648.0.0.1")))
+        // Zero padding is normalization, not size: the value is 2, so it parses.
+        assertEquals("10.0.0.2", valueOf(Ipv4Address.parse("10.0.0.00000002")).text)
+    }
+
+    @Test
     fun `mtu accepts digit grouping and spacing`() {
         assertEquals(1500, valueOf(Mtu.parse("1500")).bytes)
         assertEquals(1500, valueOf(Mtu.parse(" 1,500 ")).bytes)

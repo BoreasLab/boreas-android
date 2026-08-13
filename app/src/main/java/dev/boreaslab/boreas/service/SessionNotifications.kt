@@ -28,18 +28,17 @@ object SessionNotifications {
     const val NOTIFICATION_ID = 1
 
     fun forState(context: Context, state: VpnLifecycleState): ForegroundIntent {
+        // A guard separates the simulated session from the real one, so the two
+        // labels sit at the same level as every other state rather than one being
+        // reached through a conditional inside the other.
         val (title, showStop) = when (state) {
-            VpnLifecycleState.Starting -> context.getString(R.string.notification_starting) to false
-            VpnLifecycleState.AwaitingConsent -> context.getString(R.string.notification_starting) to false
+            VpnLifecycleState.Starting,
+            VpnLifecycleState.AwaitingConsent,
+            -> context.getString(R.string.notification_starting) to false
             is VpnLifecycleState.Stopping -> context.getString(R.string.notification_stopping) to false
-            is VpnLifecycleState.Running -> {
-                val label = if (state.status.simulated) {
-                    context.getString(R.string.notification_running_simulated)
-                } else {
-                    context.getString(R.string.notification_running)
-                }
-                label to true
-            }
+            is VpnLifecycleState.Running if state.status.simulated ->
+                context.getString(R.string.notification_running_simulated) to true
+            is VpnLifecycleState.Running -> context.getString(R.string.notification_running) to true
             VpnLifecycleState.Stopped, is VpnLifecycleState.Failed -> return ForegroundIntent.Dismiss
         }
 

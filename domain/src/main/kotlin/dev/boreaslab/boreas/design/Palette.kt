@@ -13,25 +13,25 @@ package dev.boreaslab.boreas.design
  * Steps come from the supplied palette's four ramps. The two exceptions are
  * documented at [MutedLight] and [MutedDark].
  */
-object Ramp {
-    val Indigo800 = Srgb.of(0x19254D)
-    val Indigo900 = Srgb.of(0x0D1226)
-    val Indigo950 = Srgb.of(0x090D1B)
+public object Ramp {
+    public val Indigo800: Srgb = Srgb.of(0x19254D)
+    public val Indigo900: Srgb = Srgb.of(0x0D1226)
+    public val Indigo950: Srgb = Srgb.of(0x090D1B)
 
-    val Beige50 = Srgb.of(0xF8F9EC)
-    val Beige100 = Srgb.of(0xF2F3D8)
-    val Beige200 = Srgb.of(0xE5E7B1)
-    val Beige300 = Srgb.of(0xD8DA8B)
-    val Beige800 = Srgb.of(0x4C4E18)
+    public val Beige50: Srgb = Srgb.of(0xF8F9EC)
+    public val Beige100: Srgb = Srgb.of(0xF2F3D8)
+    public val Beige200: Srgb = Srgb.of(0xE5E7B1)
+    public val Beige300: Srgb = Srgb.of(0xD8DA8B)
+    public val Beige800: Srgb = Srgb.of(0x4C4E18)
 
-    val Bronze300 = Srgb.of(0xDDA388)
-    val Bronze400 = Srgb.of(0xD28460)
-    val Bronze500 = Srgb.of(0xC76538)
-    val Bronze600 = Srgb.of(0x9F512D)
-    val Bronze700 = Srgb.of(0x773D22)
+    public val Bronze300: Srgb = Srgb.of(0xDDA388)
+    public val Bronze400: Srgb = Srgb.of(0xD28460)
+    public val Bronze500: Srgb = Srgb.of(0xC76538)
+    public val Bronze600: Srgb = Srgb.of(0x9F512D)
+    public val Bronze700: Srgb = Srgb.of(0x773D22)
 
-    val Rose300 = Srgb.of(0xD19495)
-    val Rose600 = Srgb.of(0x8F3D3F)
+    public val Rose300: Srgb = Srgb.of(0xD19495)
+    public val Rose600: Srgb = Srgb.of(0x8F3D3F)
 }
 
 /** space-indigo-800 blended 27% toward beige-50, the ratio light needs to clear body text on its densest surface. */
@@ -46,7 +46,7 @@ private val MutedDark = Srgb.of(0x949AA4)
  * A product of roles rather than a map keyed by name: a missing role is a
  * compile error, and no call site can ask for a role that does not exist.
  */
-data class ColorRoles(
+public data class ColorRoles(
     val canvas: Srgb,
     val surface: Srgb,
     val surfaceStrong: Srgb,
@@ -67,7 +67,7 @@ data class ColorRoles(
     val focus: Srgb,
 )
 
-val LightRoles = ColorRoles(
+public val LightRoles: ColorRoles = ColorRoles(
     canvas = Ramp.Beige50,
     surface = Ramp.Beige100,
     surfaceStrong = Ramp.Beige200,
@@ -88,7 +88,7 @@ val LightRoles = ColorRoles(
     focus = Ramp.Indigo900,
 )
 
-val DarkRoles = ColorRoles(
+public val DarkRoles: ColorRoles = ColorRoles(
     canvas = Ramp.Indigo950,
     surface = Ramp.Indigo900,
     surfaceStrong = Ramp.Indigo800,
@@ -120,7 +120,7 @@ val DarkRoles = ColorRoles(
  * it surrounds: it is drawn outside the control with a gap, so the canvas is
  * what sits behind the ring pixels.
  */
-fun ColorRoles.pairings(): List<Pairing> = listOf(
+public fun ColorRoles.pairings(): List<Pairing> = listOf(
     Pairing("heading on page", ink, canvas, ContrastRequirement.BodyText),
     Pairing("heading on card", ink, surface, ContrastRequirement.BodyText),
     Pairing("heading on selected row", ink, surfaceStrong, ContrastRequirement.BodyText),

@@ -16,14 +16,14 @@ import kotlinx.coroutines.flow.emptyFlow
  * in for behavior that exists elsewhere: it is the accurate answer for a build
  * that carries the Kotlin half of the product.
  */
-object UnlinkedEngineHost : EngineHost {
+public object UnlinkedEngineHost : EngineHost {
 
-    override val isAvailable = false
+    override val isAvailable: Boolean = false
 
     override suspend fun start(engine: EngineConfig, platform: PlatformConfig): EngineStart =
         EngineStart.Refused(TypedFailure.EngineUnavailable)
 
-    override suspend fun stop(session: SessionId, reason: StopReason) = Unit
+    override suspend fun stop(session: SessionId, reason: StopReason): Unit = Unit
 
     override fun status(session: SessionId): Flow<SessionStatus> = emptyFlow()
 }

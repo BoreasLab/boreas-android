@@ -48,7 +48,7 @@ fun TunnelScreen(
     session: VpnLifecycleState,
     alwaysOn: AlwaysOn,
     onChange: (TunnelDraft) -> Unit,
-    onOpenVpnSettings: () -> Unit,
+    onOpenVpnSettings: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val locked = session !is VpnLifecycleState.Stopped && session !is VpnLifecycleState.Failed

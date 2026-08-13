@@ -16,10 +16,32 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+
+        <!--
+          The system VPN settings screen, which owns the always-on switch this app
+          cannot set for itself. Declared so the app can ask whether an Activity
+          handles it before offering a control that would otherwise do nothing.
+        -->
+        <intent>
+            <action android:name="android.settings.VPN_SETTINGS" />
+        </intent>
     </queries>
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      The foreground-service type declared on the service below. Google lists VPN
+      apps, meaning those configured under Settings > Network & Internet > VPN, as
+      eligible for the systemExempted type, and from API 34 startForeground() throws
+      MissingForegroundServiceTypeException without a declared type. The permission
+      arrives at API 34, so it is scoped to those versions rather than requested on
+      every device that installs this build.
+    -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED"
+        android:minSdkVersion="34" />
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS"
+        android:minSdkVersion="33" />
 
     <application
         android:name=".BoreasApplication"
@@ -45,14 +67,15 @@
           The sole owner of VPN consent, interface creation, foreground-service
           compliance, routes, and lifecycle callbacks.
 
-          The foreground-service type is deliberately absent: docs/verified-inputs.md
-          records foreground-service behavior for the selected target SDK as
-          unverified until device work. Resolve it in A4 with a recorded device
-          observation rather than by guessing here.
+          systemExempted is the type Google names for VPN apps. It is not a
+          discretionary choice among the seventeen: every other type describes work
+          this service does not do, and specialUse is the residual bucket for cases
+          the named types miss, which this is not. See docs/verified-inputs.md.
         -->
         <service
             android:name=".service.BoreasVpnService"
             android:exported="false"
+            android:foregroundServiceType="systemExempted"
             android:permission="android.permission.BIND_VPN_SERVICE">
             <intent-filter>
                 <action android:name="android.net.VpnService" />

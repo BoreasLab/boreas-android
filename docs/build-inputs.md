@@ -39,6 +39,29 @@ The split exists because AGENTS.md requires framework effects to stay in Kotlin
 adapters and decisions to stay pure. A module boundary makes that a compile error
 instead of a convention someone has to notice in review.
 
+## Strictness
+
+| Setting | Where | Why |
+|---|---|---|
+| `allWarningsAsErrors` | both modules | A warning is a defect the compiler already located. Tolerated once, the list grows until nobody reads it. |
+| `explicitApi()` | `:domain` only | Every declaration states its visibility and its return type, so what is public is a decision rather than a default and an edited body cannot silently change a published signature. Not applied to `:app`: it is an application rather than a published surface, and every `@Composable` would have to write out `: Unit` for no reader's benefit. |
+| `lint { warningsAsErrors, abortOnError, checkDependencies, checkTestSources }` | `:app` | Same rule for the tool that sees what the compiler cannot. |
+| `lint { baseline = null }` | `:app` | A baseline converts today's findings into permanent exemptions. Adding one needs a reason recorded here. |
+
+Report format is not configured: AGP 9 always writes the text, HTML, and XML
+reports and has deprecated the switches that used to select them, so CI prints
+the text report from disk rather than aiming lint at stdout.
+
+## Language level
+
+Kotlin 2.4.10, at the compiler's default language version. Two features are used
+deliberately rather than incidentally:
+
+| Feature | Stable since | Used for |
+|---|---|---|
+| Explicit backing fields | 2.4.0 | Observable state cells. One cell gets one name, exposed at a read-only type and mutable only inside its owner, which replaces the private-mutable-plus-public-view pair the repository used before. `.github/scripts/design-gate.sh` asserts that no `_`-prefixed shadow returns and that nothing casts the exposed value back to a `Mutable*Flow`, which is the guarantee the old `asStateFlow()` wrapper used to carry. |
+| Guard conditions in `when` | 2.2.0 | Cases that were a conditional nested inside one branch, most visibly lockdown beside the other always-on states and the simulated session beside the real one. Exhaustiveness is unaffected: each guarded branch is followed by an unguarded one for the same type. |
+
 ## Dependencies
 
 Each is declared in `gradle/libs.versions.toml` and used by name.
@@ -76,31 +99,63 @@ typefaces.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs two independent jobs on every push to `main` and
-every pull request.
+`.github/workflows/ci.yml` runs three jobs on every push to `main`, every pull
+request against it, and on demand. There is no `needs:` edge between them: none
+consumes another's output, so one push reports three results instead of hiding
+the second and third behind the first.
 
 | Job | Asserts |
 |---|---|
-| `gate` | `actionlint` over the workflows including their embedded shell, `shellcheck` over `ci/*.sh`, and `ci/design-gate.sh`. No toolchain, so a punctuation slip or a stray hex literal reports back in under a minute. |
-| `build` | Gradle wrapper checksum validation, `:domain:test`, `:app:lintDebug`, then `assembleDebug` and `assembleRelease`, uploading the APKs and the reports. |
+| `gate` | `.github/scripts/design-gate.sh`. No toolchain, so a punctuation slip or a stray hex literal answers while the build is still provisioning. |
+| `build` | Gradle wrapper checksum, `:domain:test`, `assembleDebug` and `assembleRelease`, then `:app:lintDebug`, uploading the unsigned APKs and the reports. Assembly runs before lint deliberately: lint fails on warnings, so running it first would leave "does the artifact build at all" unanswered for another round trip. |
+| `workflows` | `actionlint`, `shellcheck` over the scripts, and `zizmor`. |
+
+### Supply chain
+
+The layout matches `boreas-windows` so the two repositories have one story.
+
+Every action is GitHub's own, at a major tag. `.github/zizmor.yml` records why:
+`actions/*` runs on the platform that already holds the token, so a hash pin
+buys nothing against an actor who controls the runner and costs a bump per
+patch release; `BTreeMap/*` is vendored to track upstream, so freezing it
+defeats the point. Everything else still needs a hash, and relaxing that is a
+written decision rather than an omission.
+
+No third-party action appears at all. Where an outside tool is needed it is
+fetched by exact version and verified against a digest before it runs, which is
+a stronger guarantee than pinning an action that can do anything once started:
+
+| Script | Fetches | Verified against |
+|---|---|---|
+| `actionlint.sh` | actionlint 1.7.12 | SHA256 recorded in the workflow |
+| `zizmor.sh` | zizmor 1.29.0 into a throwaway venv | pinned version, isolated from the job's Python |
+| `gradle-wrapper.sh` | nothing | the checksum Gradle publishes for the version `gradle-wrapper.properties` declares |
+| `android-sdk.sh` | SDK packages | `sdkmanager`, already on the runner image, against Google's repository manifest |
 
 Privilege is minimal by construction: the workflow default is `permissions: {}`,
-each job requests only `contents: read`, `persist-credentials` is off, every
-third-party action is pinned to a full commit SHA, and the Gradle cache is
-read-only outside `main` so a pull request cannot poison what later builds
-restore. Verified with `actionlint` and `zizmor --persona=pedantic`, both clean.
+each job requests only `contents: read`, `persist-credentials` is off, and
+`submodules: false` keeps the vendored skills out of CI entirely. Verified with
+`actionlint`, `shellcheck`, and `zizmor`, all clean.
 
-`ci/design-gate.sh` asserts ten properties that no test inside the program can
+`design-gate.sh` asserts twelve properties that no test inside the program can
 see: punctuation, one source of truth per scale, one icon family, no catch-all
-over a sealed hierarchy, copy living in `strings.xml`, and no unreferenced
-string. The accessibility floor is deliberately not here: it is a law over the
-palette and runs as `ContrastLawTest` in `:domain`.
+over a sealed hierarchy, one name per observable state cell, no cast back to a
+mutable flow, copy living in `strings.xml`, and no unreferenced string. The
+accessibility floor is deliberately not there: it is a law over the palette and
+runs as `ContrastLawTest` in `:domain`.
 
 ## Build verification status
 
-`:domain:test` (32 tests) and `:app:compileDebugKotlin` both pass locally. Resource packaging and
-APK assembly have not been run here: the build host is `aarch64` and Google
-publishes `aapt2` for `linux` as an `x86_64` binary only, so `processDebugResources`
-cannot start its daemon. Nothing about the project is arm-specific; run
-`./gradlew :app:assembleDebug` on an `x86_64` host or a machine with an
-`aarch64` Android SDK to produce an APK.
+`:domain:test` (38 tests), `:domain:compileKotlin` under `explicitApi()`, and
+`:app:compileDebugKotlin` and `:app:compileReleaseKotlin` under
+`allWarningsAsErrors` all pass locally, warning-free.
+
+Three things cannot run on this host and CI is where they first execute:
+`:app:lintDebug`, `assembleDebug`, and `assembleRelease`. The build host is
+`aarch64` and Google publishes `aapt2` for `linux` as an `x86_64` binary only, so
+`processDebugResources` cannot start its daemon and every task downstream of
+resource compilation is unreachable here. `actionlint` is the same story: the
+release archive is `linux_amd64`.
+
+Nothing about the project is arm-specific. Run `./gradlew :app:assembleDebug` on
+an `x86_64` host to produce an APK.

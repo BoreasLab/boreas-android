@@ -38,21 +38,21 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_tunnel),
                 detail = stringResource(R.string.settings_tunnel_detail),
                 leading = BoreasIcons.Globe,
-                onClick = { onOpen(Destination.Tunnel) },
+                onClick = { onOpen(Destination.Detail.Tunnel) },
             )
             RowDivider()
             NavigationRow(
                 title = stringResource(R.string.settings_apps),
                 detail = stringResource(R.string.settings_apps_detail),
                 leading = BoreasIcons.Apps,
-                onClick = { onOpen(Destination.Apps) },
+                onClick = { onOpen(Destination.Detail.Apps) },
             )
             RowDivider()
             NavigationRow(
                 title = stringResource(R.string.settings_certificate),
                 detail = stringResource(R.string.settings_certificate_detail),
                 leading = BoreasIcons.Certificate,
-                onClick = { onOpen(Destination.Certificate) },
+                onClick = { onOpen(Destination.Detail.Certificate) },
             )
         }
 
@@ -61,21 +61,21 @@ fun SettingsScreen(
                 title = stringResource(R.string.settings_appearance),
                 detail = stringResource(R.string.settings_appearance_detail),
                 leading = BoreasIcons.Settings,
-                onClick = { onOpen(Destination.Appearance) },
+                onClick = { onOpen(Destination.Detail.Appearance) },
             )
             RowDivider()
             NavigationRow(
                 title = stringResource(R.string.settings_diagnostics),
                 detail = stringResource(R.string.settings_diagnostics_detail),
                 leading = BoreasIcons.Document,
-                onClick = { onOpen(Destination.Diagnostics) },
+                onClick = { onOpen(Destination.Detail.Diagnostics) },
             )
             RowDivider()
             NavigationRow(
                 title = stringResource(R.string.settings_about),
                 detail = stringResource(R.string.settings_about_detail),
                 leading = BoreasIcons.Info,
-                onClick = { onOpen(Destination.About) },
+                onClick = { onOpen(Destination.Detail.About) },
             )
         }
     }

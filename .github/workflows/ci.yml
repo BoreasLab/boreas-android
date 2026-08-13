@@ -114,13 +114,36 @@ jobs:
         shell: bash
         run: ./gradlew --no-daemon :domain:test
 
+      # Before lint, deliberately. Lint is configured to fail on warnings, so
+      # running it first would stop the job and leave the question of whether the
+      # artifact even builds unanswered for another round trip. Assembly is the
+      # more expensive fact to learn, so it is learned first.
+      - name: Build the artifact
+        shell: bash
+        run: ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
+
       - name: Lint the Android module
         shell: bash
         run: ./gradlew --no-daemon :app:lintDebug
 
-      - name: Build the artifact
+      # AGP 9 always writes the reports and has deprecated the switches that used
+      # to aim them at stdout, so the text report is read back from disk. `always`
+      # because the report is worth most on the run where the step above failed,
+      # and the whole file because a truncated finding list costs another push to
+      # complete.
+      - name: Print the lint report
+        if: always()
         shell: bash
-        run: ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
+        run: |
+          found=0
+          while IFS= read -r report; do
+            found=1
+            printf '\n===== %s =====\n' "$report"
+            cat -- "$report"
+          done < <(find app/build -name 'lint-results-*.txt' -type f)
+          if ((found == 0)); then
+            printf 'no lint text report was written\n'
+          fi
 
       # Unsigned, and built from a dependency set no release gate has admitted.
       # This is a build output for inspection, not a release candidate, and the

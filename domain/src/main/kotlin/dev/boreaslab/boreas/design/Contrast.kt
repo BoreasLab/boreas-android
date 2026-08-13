@@ -10,17 +10,17 @@ import kotlin.math.pow
  * silently produce a ratio for a color nobody can render.
  */
 @JvmInline
-value class Srgb private constructor(val packed: Int) {
+public value class Srgb private constructor(public val packed: Int) {
 
-    val red: Int get() = (packed shr 16) and 0xFF
-    val green: Int get() = (packed shr 8) and 0xFF
-    val blue: Int get() = packed and 0xFF
+    public val red: Int get() = (packed shr 16) and 0xFF
+    public val green: Int get() = (packed shr 8) and 0xFF
+    public val blue: Int get() = packed and 0xFF
 
     /** `0xRRGGBB` as lowercase hex, for test output and documentation. */
-    fun hex(): String = "#%06x".format(packed)
+    public fun hex(): String = "#%06x".format(packed)
 
-    companion object {
-        fun of(packed: Int): Srgb {
+    public companion object {
+        public fun of(packed: Int): Srgb {
             require(packed in 0x000000..0xFFFFFF) {
                 "not a 24-bit sRGB value: 0x${packed.toString(16)}"
             }
@@ -36,7 +36,7 @@ value class Srgb private constructor(val packed: Int) {
  * defines and inventing a third would be inventing a standard. Values are from
  * WCAG 2.2 (W3C Recommendation, 12 December 2024), conformance level AA.
  */
-enum class ContrastRequirement(val minimum: Double) {
+public enum class ContrastRequirement(public val minimum: Double) {
 
     /** SC 1.4.3 Contrast (Minimum): text below the large-text threshold. */
     BodyText(4.5),
@@ -54,7 +54,7 @@ enum class ContrastRequirement(val minimum: Double) {
  * Pure and total over [Srgb]. Three channel transfers and a dot product, so
  * $O(1)$ with no allocation beyond the boxed `Double` the caller asks for.
  */
-fun Srgb.relativeLuminance(): Double {
+public fun Srgb.relativeLuminance(): Double {
     fun channel(value: Int): Double {
         val c = value / 255.0
         return if (c <= 0.03928) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)
@@ -68,7 +68,7 @@ fun Srgb.relativeLuminance(): Double {
  * Symmetric: the brighter of the two is always the numerator, so callers need
  * not know which color is the foreground.
  */
-fun contrastRatio(a: Srgb, b: Srgb): Double {
+public fun contrastRatio(a: Srgb, b: Srgb): Double {
     val la = a.relativeLuminance()
     val lb = b.relativeLuminance()
     val lighter = maxOf(la, lb)
@@ -83,12 +83,12 @@ fun contrastRatio(a: Srgb, b: Srgb): Double {
  * be folded over: the test is a single traversal accumulating every failure
  * instead of stopping at the first.
  */
-data class Pairing(
+public data class Pairing(
     val describe: String,
     val foreground: Srgb,
     val background: Srgb,
     val requirement: ContrastRequirement,
 ) {
-    val ratio: Double get() = contrastRatio(foreground, background)
-    val holds: Boolean get() = ratio >= requirement.minimum
+    public val ratio: Double get() = contrastRatio(foreground, background)
+    public val holds: Boolean get() = ratio >= requirement.minimum
 }

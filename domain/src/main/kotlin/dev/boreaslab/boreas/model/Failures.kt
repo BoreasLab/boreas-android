@@ -7,7 +7,7 @@ package dev.boreaslab.boreas.model
  * "bypass denied while starting" and "bypass denied while following a network
  * change" need different copy and offer different next steps.
  */
-enum class Operation { Start, Stop, Reconfigure, NetworkChange }
+public enum class Operation { Start, Stop, Reconfigure, NetworkChange }
 
 /**
  * Every failure this surface can show.
@@ -17,7 +17,7 @@ enum class Operation { Start, Stop, Reconfigure, NetworkChange }
  * region. Nothing here is a raw fault code. Each maps to copy that states what
  * happened, what it means, and the next action.
  */
-sealed interface TypedFailure {
+public sealed interface TypedFailure {
 
     /**
      * The shared engine is not part of this build.
@@ -26,26 +26,26 @@ sealed interface TypedFailure {
      * surface can reach every state up to the point where packets would be handed
      * over, and stops there.
      */
-    data object EngineUnavailable : TypedFailure
+    public data object EngineUnavailable : TypedFailure
 
     /** The consent dialog was shown and the user declined. Recoverable. */
-    data object ConsentDenied : TypedFailure
+    public data object ConsentDenied : TypedFailure
 
     /** VpnService.prepare returned no intent and no permission. Not recoverable here. */
-    data object ConsentUnavailable : TypedFailure
+    public data object ConsentUnavailable : TypedFailure
 
     /** VpnService.protect refused a socket. The engine fails closed rather than loop. */
-    data object BypassDenied : TypedFailure
+    public data object BypassDenied : TypedFailure
 
     /** Android rejected the interface configuration built from PlatformConfig. */
-    data object InterfaceRejected : TypedFailure
+    public data object InterfaceRejected : TypedFailure
 
     /** A configuration change cannot be applied to the running session. */
-    data object RestartRequired : TypedFailure
+    public data object RestartRequired : TypedFailure
 }
 
 /** Whether the user can act on a failure from the screen that shows it. */
-val TypedFailure.isRecoverable: Boolean
+public val TypedFailure.isRecoverable: Boolean
     get() = when (this) {
         TypedFailure.EngineUnavailable -> false
         TypedFailure.ConsentUnavailable -> false

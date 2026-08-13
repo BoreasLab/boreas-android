@@ -16,8 +16,22 @@ java {
 }
 
 kotlin {
+    /**
+     * Every declaration states its visibility and its return type.
+     *
+     * This module is the seam the shared engine will be bound against, so what is
+     * public here is a decision rather than a default. Strict mode makes an omitted
+     * modifier an error: a helper cannot become part of the contract by being
+     * forgotten, and an inferred return type cannot change the published signature
+     * when its body is edited.
+     */
+    explicitApi()
+
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        // A warning is a defect the compiler already found. Treating it as anything
+        // less means the first one is tolerated and the hundredth is invisible.
+        allWarningsAsErrors.set(true)
     }
 }
 

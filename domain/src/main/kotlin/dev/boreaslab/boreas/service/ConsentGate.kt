@@ -1,7 +1,7 @@
 package dev.boreaslab.boreas.service
 
 /** The three answers Android can give to a VPN consent request. A closed set. */
-enum class ConsentOutcome { Granted, Denied, Unavailable }
+public enum class ConsentOutcome { Granted, Denied, Unavailable }
 
 /**
  * Asking the user for permission to create a VPN interface.
@@ -10,6 +10,6 @@ enum class ConsentOutcome { Granted, Denied, Unavailable }
  * unit tests drive without an Activity, a Looper, or a device. The Android
  * implementation lives in the app module, on the other side of this boundary.
  */
-interface ConsentGate {
-    suspend fun request(): ConsentOutcome
+public interface ConsentGate {
+    public suspend fun request(): ConsentOutcome
 }

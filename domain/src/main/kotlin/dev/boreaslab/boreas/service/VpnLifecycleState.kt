@@ -18,15 +18,15 @@ import dev.boreaslab.boreas.model.isRecoverable
  * The variants match docs/platform-integration.md exactly. Only [Starting] may
  * establish a TUN and only [Running] may request a controlled configuration change.
  */
-sealed interface VpnLifecycleState {
+public sealed interface VpnLifecycleState {
 
-    data object Stopped : VpnLifecycleState
+    public data object Stopped : VpnLifecycleState
 
-    data object AwaitingConsent : VpnLifecycleState
+    public data object AwaitingConsent : VpnLifecycleState
 
-    data object Starting : VpnLifecycleState
+    public data object Starting : VpnLifecycleState
 
-    data class Running(
+    public data class Running(
         val session: SessionId,
         val status: SessionStatus,
         /**
@@ -39,13 +39,13 @@ sealed interface VpnLifecycleState {
         val applied: EngineConfig,
     ) : VpnLifecycleState
 
-    data class Stopping(val session: SessionId) : VpnLifecycleState
+    public data class Stopping(val session: SessionId) : VpnLifecycleState
 
-    data class Failed(
+    public data class Failed(
         val operation: Operation,
         val failure: TypedFailure,
     ) : VpnLifecycleState {
-        val recoverable: Boolean get() = failure.isRecoverable
+        public val recoverable: Boolean get() = failure.isRecoverable
     }
 }
 
@@ -55,7 +55,7 @@ sealed interface VpnLifecycleState {
  * The primary control reads this to show progress in place rather than swapping
  * itself for a spinner, so it never changes size or moves under the reader's thumb.
  */
-val VpnLifecycleState.isTransitional: Boolean
+public val VpnLifecycleState.isTransitional: Boolean
     get() = when (this) {
         VpnLifecycleState.AwaitingConsent,
         VpnLifecycleState.Starting,

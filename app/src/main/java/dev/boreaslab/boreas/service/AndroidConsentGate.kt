@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 
 /**
  * Carries a consent request from the service to whichever Activity is on screen,
@@ -26,8 +25,8 @@ import kotlinx.coroutines.flow.asSharedFlow
  */
 object ConsentBroker {
 
-    private val _requests = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
-    val requests: SharedFlow<Intent> = _requests.asSharedFlow()
+    val requests: SharedFlow<Intent>
+        field = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
 
     /** At most one consent request is outstanding; a newer one supersedes it. */
     private val pending = AtomicReference<CompletableDeferred<ConsentOutcome>?>(null)
@@ -43,7 +42,7 @@ object ConsentBroker {
         val slot = CompletableDeferred<ConsentOutcome>()
         pending.getAndSet(slot)?.complete(ConsentOutcome.Unavailable)
 
-        if (!_requests.tryEmit(intent)) {
+        if (!requests.tryEmit(intent)) {
             pending.compareAndSet(slot, null)
             return ConsentOutcome.Unavailable
         }

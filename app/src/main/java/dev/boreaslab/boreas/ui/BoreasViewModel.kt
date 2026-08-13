@@ -94,8 +94,8 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
      * not race a disk write. It is written back on every change, which is what makes
      * a half-typed entry survive the process being killed in the background.
      */
-    private val _tunnelDraft = MutableStateFlow<TunnelDraft?>(null)
-    val tunnelDraft: StateFlow<TunnelDraft?> = _tunnelDraft
+    val tunnelDraft: StateFlow<TunnelDraft?>
+        field = MutableStateFlow<TunnelDraft?>(null)
 
     /**
      * Validation of the live draft.
@@ -104,18 +104,19 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
      * the text it describes.
      */
     val tunnelParse: StateFlow<TunnelParse?> =
-        combine(_tunnelDraft, excludedPackages) { draft, excluded ->
+        combine(tunnelDraft, excludedPackages) { draft, excluded ->
             draft?.let { TunnelParse.of(it, excluded) }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    private val _installedApps = MutableStateFlow<List<InstalledApp>?>(null)
-    val installedApps: StateFlow<List<InstalledApp>?> = _installedApps
+    val installedApps: StateFlow<List<InstalledApp>?>
+        field = MutableStateFlow<List<InstalledApp>?>(null)
 
-    val appSearch = MutableStateFlow("")
+    val appSearch: StateFlow<String>
+        field = MutableStateFlow("")
 
     /** Apps matching the current search, indexed once per query rather than per row. */
     val visibleApps: StateFlow<List<InstalledApp>?> =
-        combine(_installedApps, appSearch) { apps, query ->
+        combine(installedApps, appSearch) { apps, query ->
             if (apps == null) return@combine null
             if (query.isBlank()) return@combine apps
             val needle = query.trim().lowercase()
@@ -123,7 +124,7 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
-        viewModelScope.launch { _tunnelDraft.value = settings.tunnelDraft.first() }
+        viewModelScope.launch { tunnelDraft.value = settings.tunnelDraft.first() }
     }
 
     // Session commands. Both are idempotent at the service, so a repeated tap
@@ -155,8 +156,19 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     }
 
     fun setTunnelDraft(draft: TunnelDraft) {
-        _tunnelDraft.value = draft
+        tunnelDraft.value = draft
         viewModelScope.launch { settings.setTunnelDraft(draft) }
+    }
+
+    /**
+     * The Apps screen's search text.
+     *
+     * A method rather than a publicly mutable flow, so this holder is the only
+     * writer of every cell it exposes and the screens stay pure functions of what
+     * they are given.
+     */
+    fun setAppSearch(query: String) {
+        appSearch.value = query
     }
 
     fun setAppExcluded(packageName: String, excluded: Boolean) {
@@ -190,9 +202,9 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
      * once rather than per comparison.
      */
     fun loadInstalledApps() {
-        if (_installedApps.value != null) return
+        if (installedApps.value != null) return
         viewModelScope.launch {
-            _installedApps.value = withContext(Dispatchers.IO) {
+            installedApps.value = withContext(Dispatchers.IO) {
                 val manager = app.packageManager
                 val collator = java.text.Collator.getInstance()
                 val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
