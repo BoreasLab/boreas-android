@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Boreas</string>
+
+    <!-- Navigation. Each label matches its screen title exactly. -->
+    <string name="nav_shield">Shield</string>
+    <string name="nav_activity">Activity</string>
+    <string name="nav_policy">Policy</string>
+    <string name="nav_settings">Settings</string>
+    <string name="action_back">Back</string>
+
+    <!-- Session state. One label per intent, used everywhere that intent appears. -->
+    <string name="session_heading">Tunnel</string>
+    <string name="state_stopped">Not running</string>
+    <string name="state_stopped_detail">Traffic is leaving this device without filtering.</string>
+    <string name="state_awaiting_consent">Waiting for permission</string>
+    <string name="state_awaiting_consent_detail">Android is asking whether Boreas may set up a VPN connection.</string>
+    <string name="state_starting">Starting</string>
+    <string name="state_starting_detail">Setting up the tunnel interface.</string>
+    <string name="state_running">Running</string>
+    <string name="state_stopping">Stopping</string>
+    <string name="state_stopping_detail">Closing the tunnel and releasing the interface.</string>
+    <string name="state_failed">Stopped by an error</string>
+
+    <string name="action_start">Start tunnel</string>
+    <string name="action_stop">Stop tunnel</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_details">Details</string>
+
+    <string name="session_label">Session</string>
+    <string name="session_uptime">Uptime</string>
+    <string name="session_profile">Profile</string>
+
+    <!-- Typed failures. Each names what happened, what it means, and the next step. -->
+    <string name="fail_engine_unavailable_title">The packet engine is not in this build</string>
+    <string name="fail_engine_unavailable_detail">Boreas routes packets through a shared Rust engine. This build carries the Android control surface only, so there is nothing to hand the tunnel to.</string>
+    <string name="fail_consent_denied_title">Permission refused</string>
+    <string name="fail_consent_denied_detail">Android will not create a VPN interface without your approval. Start the tunnel again to see the request a second time.</string>
+    <string name="fail_consent_unavailable_title">This device cannot prepare a VPN</string>
+    <string name="fail_consent_unavailable_detail">Another app may already hold the always-on VPN slot, or the device policy forbids VPN apps. Check Settings, then Network, then VPN.</string>
+    <string name="fail_bypass_denied_title">An upstream socket could not bypass the tunnel</string>
+    <string name="fail_bypass_denied_detail">Boreas stops rather than send its own upstream traffic back through itself. Nothing was tunnelled.</string>
+    <string name="fail_interface_title">The tunnel interface could not be created</string>
+    <string name="fail_interface_detail">Android refused the interface configuration. Check the addresses and routes under Settings, then Tunnel.</string>
+    <string name="fail_restart_required_title">The new configuration needs a restart</string>
+    <string name="fail_restart_required_detail">The running session kept its previous configuration. Stop and start the tunnel to apply the change.</string>
+
+    <string name="failed_context">This happened %1$s.</string>
+    <string name="operation_start">while starting</string>
+    <string name="operation_stop">while stopping</string>
+    <string name="operation_reconfigure">while applying a configuration change</string>
+    <string name="operation_network_change">while following a network change</string>
+
+    <!-- Simulation. Debug builds only, and never silent. -->
+    <string name="simulation_title">Simulated session</string>
+    <string name="simulation_detail">Every number below is generated in the app. No packets are being tunnelled and no traffic is filtered.</string>
+    <string name="simulation_setting">Simulated session</string>
+    <string name="simulation_setting_detail">Runs the lifecycle and fills the counters with generated values, so the interface can be reviewed before the packet engine is linked. Debug builds only.</string>
+
+    <!-- Generic container states. -->
+    <string name="container_filtered_title">Nothing matches</string>
+    <string name="container_filtered_detail">No item matches the current filter.</string>
+    <string name="container_clear_filter">Clear filter</string>
+    <string name="container_busy">Busy</string>
+
+    <!-- Activity. The title states the question the screen answers. -->
+    <string name="activity_title">What has the tunnel handled?</string>
+    <string name="activity_since">Counted since %1$s</string>
+    <string name="activity_group_flows">Flows</string>
+    <string name="activity_group_transfer">Transfer</string>
+    <string name="activity_group_upstream">Upstream</string>
+    <string name="metric_flows_active">Active</string>
+    <string name="metric_flows_accepted">Accepted</string>
+    <string name="metric_flows_denied">Denied by policy</string>
+    <string name="metric_bytes_in">Received</string>
+    <string name="metric_bytes_out">Sent</string>
+    <string name="metric_upstream_kind">Route</string>
+    <string name="metric_upstream_protected">Sockets bypassed</string>
+    <string name="metric_no_baseline">No comparison yet</string>
+
+    <string name="activity_empty_title">No counters yet</string>
+    <string name="activity_empty_detail">The engine reports counters while a session runs. Start the tunnel to collect the first set.</string>
+    <string name="activity_error_title">Counters are unavailable</string>
+    <string name="activity_error_detail">The running session did not return a status snapshot.</string>
+    <string name="activity_loading">Reading the status snapshot</string>
+
+    <!-- Policy. Owned by the engine; this screen only chooses values. -->
+    <string name="policy_title">Policy</string>
+    <string name="policy_intro">The engine decides what happens to every packet. These choices are handed to it when a session starts.</string>
+    <string name="policy_group_filtering">Filtering</string>
+    <string name="policy_profile">Rule profile</string>
+    <string name="policy_profile_off">Off</string>
+    <string name="policy_profile_off_detail">Packets pass through unchanged. Useful for isolating whether Boreas is involved in a problem.</string>
+    <string name="policy_profile_standard">Standard</string>
+    <string name="policy_profile_standard_detail">Blocks known tracking and advertising endpoints. Leaves everything else alone.</string>
+    <string name="policy_profile_strict">Strict</string>
+    <string name="policy_profile_strict_detail">Adds telemetry and fingerprinting endpoints. Breaks some apps that treat those endpoints as required.</string>
+
+    <string name="policy_group_inspection">Inspection</string>
+    <string name="policy_tls">Inspect TLS connections</string>
+    <string name="policy_tls_detail">Lets the engine read inside HTTPS so rules can act on more than the hostname. Requires the Boreas certificate.</string>
+    <string name="policy_tls_blocked">Install the certificate first under Settings, then Certificate.</string>
+
+    <string name="policy_group_egress">Egress</string>
+    <string name="policy_egress">Upstream route</string>
+    <string name="policy_egress_direct">Direct</string>
+    <string name="policy_egress_direct_detail">The engine opens its own sockets. Each one is bypassed around the tunnel before it connects.</string>
+    <string name="policy_egress_proxy">Through a proxy</string>
+    <string name="policy_egress_proxy_detail">Hands upstream traffic to a proxy you configure.</string>
+
+    <string name="policy_pending_title">Changes are not applied yet</string>
+    <string name="policy_pending_detail">The running session keeps its current policy until you restart the tunnel.</string>
+    <string name="policy_apply">Restart tunnel to apply</string>
+    <string name="policy_discard">Discard changes</string>
+    <string name="policy_saved">Saved. Applies when the tunnel next starts.</string>
+
+    <!-- Settings index. -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_tunnel">Tunnel</string>
+    <string name="settings_tunnel_detail">Addresses, routes, DNS servers, and MTU</string>
+    <string name="settings_apps">Apps</string>
+    <string name="settings_apps_detail">Choose which apps use the tunnel</string>
+    <string name="settings_certificate">Certificate</string>
+    <string name="settings_certificate_detail">Install or remove the Boreas certificate</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_appearance_detail">Theme</string>
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_diagnostics_detail">Recent lifecycle events and typed errors</string>
+    <string name="settings_about">About</string>
+    <string name="settings_about_detail">Version and licenses</string>
+
+    <!-- Tunnel. Android addressing, not filtering policy. -->
+    <string name="tunnel_title">Tunnel</string>
+    <string name="tunnel_intro">Android builds the tunnel interface from these values. They describe the device, not what the engine does with the packets.</string>
+    <string name="tunnel_address">IPv4 address</string>
+    <string name="tunnel_address_help">The address Boreas gives the tunnel interface. Use a range that nothing else on your network uses.</string>
+    <string name="tunnel_mtu">MTU</string>
+    <string name="tunnel_mtu_help">Largest packet the interface will carry, in bytes. Between 1280 and 9000.</string>
+    <string name="tunnel_dns">DNS servers</string>
+    <string name="tunnel_dns_help">One address per line. Leave empty to keep the servers the network supplies.</string>
+    <string name="tunnel_locked">Stop the tunnel to change these</string>
+    <string name="tunnel_locked_detail">A running session holds the interface it was given. These fields become editable once it stops.</string>
+
+    <string name="error_address_shape">Enter four numbers separated by dots, for example 10.0.0.2</string>
+    <string name="error_address_range">Each part must be 255 or less</string>
+    <string name="error_mtu_shape">Enter a whole number of bytes</string>
+    <string name="error_mtu_range">Must be between 1280 and 9000</string>
+    <string name="error_dns_shape">%1$s is not an IP address</string>
+    <string name="error_required">Required</string>
+
+    <!-- Apps. -->
+    <string name="apps_title">Apps</string>
+    <string name="apps_intro">By default every app uses the tunnel. Turn one off to send its traffic straight to the network.</string>
+    <string name="apps_search">Search apps</string>
+    <string name="apps_excluded_count">%1$d excluded</string>
+    <string name="apps_none_excluded">Every app uses the tunnel</string>
+    <string name="apps_empty_title">No apps to list</string>
+    <string name="apps_empty_detail">Boreas could not read the installed app list.</string>
+    <string name="apps_filtered_title">No app matches that search</string>
+    <string name="apps_clear_search">Clear search</string>
+    <string name="apps_loading">Reading installed apps</string>
+    <string name="apps_uses_tunnel">Uses the tunnel</string>
+
+    <!-- Certificate. -->
+    <string name="certificate_title">Certificate</string>
+    <string name="certificate_intro">Reading inside HTTPS requires a certificate that this device trusts. Boreas installs it into your personal certificate store, which you control and can remove at any time.</string>
+    <string name="certificate_absent">Not installed</string>
+    <string name="certificate_absent_detail">TLS inspection stays off until the certificate is installed.</string>
+    <string name="certificate_present">Installed</string>
+    <string name="certificate_install">Install certificate</string>
+    <string name="certificate_remove">Remove certificate</string>
+    <string name="certificate_remove_confirm_title">Remove the Boreas certificate?</string>
+    <string name="certificate_remove_confirm_detail">Android opens its certificate settings, where you remove it yourself. TLS inspection turns off and connections stop being readable by the engine.</string>
+    <string name="certificate_scope_title">What this certificate can and cannot do</string>
+    <string name="certificate_scope_user">It goes in the personal store, so only apps that opt in to personal certificates will honor it. Many apps pin their own and will not.</string>
+    <string name="certificate_scope_removal">Removing it is an Android action, not a Boreas one. Boreas can open the screen but cannot delete it for you.</string>
+
+    <!-- Appearance. -->
+    <string name="appearance_title">Appearance</string>
+    <string name="theme_heading">Theme</string>
+    <string name="theme_system">Follow the system</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+
+    <!-- Diagnostics. -->
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_intro">Lifecycle transitions recorded by the service, newest first. This list holds the most recent entries and is not written to disk.</string>
+    <string name="diagnostics_empty_title">Nothing recorded</string>
+    <string name="diagnostics_empty_detail">Transitions appear here once you start a tunnel.</string>
+    <string name="diagnostics_copy">Copy to clipboard</string>
+    <string name="diagnostics_copied">Copied</string>
+    <string name="diagnostics_clear">Clear</string>
+    <string name="diagnostics_cleared">Cleared</string>
+    <string name="action_undo">Undo</string>
+
+    <!-- About. -->
+    <string name="about_title">About</string>
+    <string name="about_version">Version</string>
+    <string name="about_engine">Packet engine</string>
+    <string name="about_engine_absent">Not linked</string>
+    <string name="about_role">Boreas keeps Android concerns in Kotlin and packet handling in a shared engine. This build contains the Kotlin half.</string>
+    <string name="about_licenses">Open source licenses</string>
+    <string name="about_typefaces">Typefaces</string>
+    <string name="about_typefaces_detail">EB Garamond, Inter, and JetBrains Mono, under the SIL Open Font License.</string>
+
+    <!-- Notification. -->
+    <string name="notification_channel_session">Tunnel status</string>
+    <string name="notification_channel_session_detail">Shows whether the tunnel is running. Android requires this while a VPN is active.</string>
+    <string name="notification_running">Tunnel running</string>
+    <string name="notification_running_simulated">Simulated session</string>
+    <string name="notification_starting">Starting the tunnel</string>
+    <string name="notification_stopping">Stopping the tunnel</string>
+
+    <!-- Content descriptions and announcements. -->
+    <string name="cd_open">Open %1$s</string>
+    <string name="cd_session_state">Tunnel state: %1$s</string>
+    <string name="announce_running">Tunnel running</string>
+    <string name="announce_stopped">Tunnel stopped</string>
+    <string name="announce_failed">Tunnel stopped by an error</string>
+</resources>

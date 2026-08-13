@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The launch theme only. Every color after the first frame comes from
+      BoreasTheme in Compose, so this exists to paint the canvas before Compose
+      takes over and to avoid a white flash on cold start.
+    -->
+    <style name="Theme.Boreas" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/launch_canvas</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

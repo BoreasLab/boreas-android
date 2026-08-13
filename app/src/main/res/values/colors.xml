@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- beige-50. Matches BoreasColors.canvas (light) so cold start does not flash. -->
+    <color name="launch_canvas">#F8F9EC</color>
+    <!-- space-indigo-900. The launcher mark ground. -->
+    <color name="mark_ground">#0D1226</color>
+</resources>
