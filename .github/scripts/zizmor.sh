@@ -4,8 +4,30 @@
 # over-broad permissions, unpinned actions, persisted credentials, and
 # untrusted context interpolated into a shell.
 #
-# Assumes bash 4+ and a Python 3 with pip (the ubuntu-latest runner image).
+# Assumes bash 4+, git, and a Python 3 with pip (the ubuntu-latest runner image).
 set -euo pipefail
+
+# The repository these checks belong to.
+#
+# Asked of git, from the script's own directory, rather than assumed to be the
+# working directory. Anchoring on the caller's cwd means the answer changes with
+# where the script is invoked from, and the wrong answer is still a valid path:
+# run from a subdirectory it silently checks nothing, run from another checkout
+# it silently checks that one. git answers the question actually being asked.
+repo_root() {
+  local here
+  command -v git >/dev/null ||
+    { printf 'git is required to locate the repository\n' >&2; return 1; }
+  here="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)"
+  git -C "$here" rev-parse --show-toplevel 2>/dev/null ||
+    { printf 'not inside a git repository: %s\n' "$here" >&2; return 1; }
+}
+
+REPO="$(repo_root)"
+readonly REPO
+# Every path below is written relative to the repository root, and this is what
+# makes that true regardless of where the caller stood.
+cd "$REPO"
 
 readonly VERSION="${ZIZMOR_VERSION:?ZIZMOR_VERSION must be set}"
 

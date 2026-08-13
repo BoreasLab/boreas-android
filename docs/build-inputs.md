@@ -137,6 +137,12 @@ each job requests only `contents: read`, `persist-credentials` is off, and
 `submodules: false` keeps the vendored skills out of CI entirely. Verified with
 `actionlint`, `shellcheck`, and `zizmor`, all clean.
 
+Every script under `.github/scripts` and the setup script locate the repository
+by asking git from the script's own directory. None takes a path argument and
+none trusts the working directory: an answer derived from cwd or from a relative
+climb is wrong silently, checking nothing from a subdirectory or another
+checkout entirely, while git answers the question actually being asked.
+
 `design-gate.sh` asserts twelve properties that no test inside the program can
 see: punctuation, one source of truth per scale, one icon family, no catch-all
 over a sealed hierarchy, one name per observable state cell, no cast back to a

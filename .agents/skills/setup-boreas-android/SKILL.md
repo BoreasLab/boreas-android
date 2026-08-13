@@ -12,7 +12,7 @@ description: >-
   Android device or emulator setup, or for shipping a release build.
 license: MIT
 compatibility: >-
-  Linux x86_64 or aarch64, network access, and bash 4+, curl, tar, unzip,
+  Linux x86_64 or aarch64, network access, and bash 4+, git, curl, tar, unzip,
   sha256sum. Roughly 6 GB of free space under the toolchain root. Both
   architectures reach every gate; aarch64 runs resource tasks under emulation
   and is therefore slower.
@@ -34,7 +34,9 @@ is identical on both architectures.
 
 ## Procedure
 
-Run `setup` from anywhere. It locates the repository from its own path.
+Run `setup` from anywhere. It asks git where the repository is, starting from
+its own location, so neither the working directory nor the script's depth in the
+tree affects the answer.
 
 <setup_command>
 
@@ -163,3 +165,7 @@ flag to pass and nothing to remember differently per machine.
 - Never add Kotlin to `PATH`. The Gradle plugin pinned in `version-catalog` is
   the compiler, and a second one on `PATH` will not be used but will confuse
   diagnosis.
+- Every script in this repository locates the repository through git rather than
+  from the working directory or a relative climb. Copy that `repo_root` function
+  when adding one; a path built from `..` encodes where the file sits today and
+  fails silently rather than loudly when it moves.

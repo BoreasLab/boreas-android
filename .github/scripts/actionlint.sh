@@ -3,12 +3,34 @@
 # Fetch one exact actionlint release, verify it against a checksum recorded by
 # the caller, and lint every workflow.
 #
-# Assumes bash 4+ and GNU coreutils (the ubuntu-latest runner image).
+# Assumes bash 4+, git, and GNU coreutils (the ubuntu-latest runner image).
 #
 # The checksum is the point. Pinning a version says which artifact we asked
 # for; verifying the digest says which artifact we got. Without the second, a
 # replaced release asset runs as root in CI with the repository checked out.
 set -euo pipefail
+
+# The repository these checks belong to.
+#
+# Asked of git, from the script's own directory, rather than assumed to be the
+# working directory. Anchoring on the caller's cwd means the answer changes with
+# where the script is invoked from, and the wrong answer is still a valid path:
+# run from a subdirectory it silently checks nothing, run from another checkout
+# it silently checks that one. git answers the question actually being asked.
+repo_root() {
+  local here
+  command -v git >/dev/null ||
+    { printf 'git is required to locate the repository\n' >&2; return 1; }
+  here="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)"
+  git -C "$here" rev-parse --show-toplevel 2>/dev/null ||
+    { printf 'not inside a git repository: %s\n' "$here" >&2; return 1; }
+}
+
+REPO="$(repo_root)"
+readonly REPO
+# actionlint discovers workflows from the working directory, so this is what
+# decides which repository gets linted.
+cd "$REPO"
 
 # The parse boundary. Both are required and neither is re-checked below.
 readonly VERSION="${ACTIONLINT_VERSION:?ACTIONLINT_VERSION must be set}"

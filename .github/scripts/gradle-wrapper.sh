@@ -3,7 +3,7 @@
 # Verify the committed Gradle wrapper jar against the checksum Gradle publishes
 # for the version this repository declares.
 #
-# Assumes bash 4+ and GNU coreutils (the ubuntu-latest runner image).
+# Assumes bash 4+, git, and GNU coreutils (the ubuntu-latest runner image).
 #
 # The wrapper jar is executable code committed to the repository, and the build
 # runs it with whatever privileges the job holds. Checking it is the same
@@ -14,6 +14,28 @@
 # metadata that names the version, so bumping the wrapper needs no second edit
 # and the two can never disagree.
 set -euo pipefail
+
+# The repository these checks belong to.
+#
+# Asked of git, from the script's own directory, rather than assumed to be the
+# working directory. Anchoring on the caller's cwd means the answer changes with
+# where the script is invoked from, and the wrong answer is still a valid path:
+# run from a subdirectory it silently checks nothing, run from another checkout
+# it silently checks that one. git answers the question actually being asked.
+repo_root() {
+  local here
+  command -v git >/dev/null ||
+    { printf 'git is required to locate the repository\n' >&2; return 1; }
+  here="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)"
+  git -C "$here" rev-parse --show-toplevel 2>/dev/null ||
+    { printf 'not inside a git repository: %s\n' "$here" >&2; return 1; }
+}
+
+REPO="$(repo_root)"
+readonly REPO
+# Every path below is written relative to the repository root, and this is what
+# makes that true regardless of where the caller stood.
+cd "$REPO"
 
 readonly PROPERTIES="gradle/wrapper/gradle-wrapper.properties"
 readonly JAR="gradle/wrapper/gradle-wrapper.jar"

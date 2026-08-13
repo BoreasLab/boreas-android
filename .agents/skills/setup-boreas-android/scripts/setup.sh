@@ -9,7 +9,7 @@
 #   bash .agents/skills/setup-boreas-android/scripts/setup.sh
 #   bash .agents/skills/setup-boreas-android/scripts/setup.sh --reinstall
 #
-# Assumes bash 4+, GNU coreutils, and: curl, tar, unzip, sha256sum.
+# Assumes bash 4+, GNU coreutils, and: git, curl, tar, unzip, sha256sum.
 #
 #
 # THE ONE ARCHITECTURE FACT
@@ -127,9 +127,24 @@ readonly AAPT2_ENTRY="$AAPT2_DIR/aapt2"
 readonly AAPT2_REAL="$AAPT2_DIR/aapt2.x86_64"
 readonly ACTIVATE="$ROOT/activate.sh"
 
-# Repository root, from this script's own location, so the script works whether
-# or not it is run from the checkout and whether or not git is installed.
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+# The repository this script belongs to.
+#
+# Asked of git, from the script's own directory, rather than counted in `..`
+# segments. A relative climb encodes where the file happens to sit today, so
+# moving it changes which directory it calls the root, and it does so silently:
+# the wrong answer is still a valid path. git answers the question actually
+# being asked, and keeps answering it from a subdirectory, a worktree, or a
+# symlink into the tree.
+repo_root() {
+  local here
+  command -v git >/dev/null ||
+    { printf 'git is required to locate the repository\n' >&2; return 1; }
+  here="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)"
+  git -C "$here" rev-parse --show-toplevel 2>/dev/null ||
+    { printf 'not inside a git repository: %s\n' "$here" >&2; return 1; }
+}
+
+REPO="$(repo_root)"
 readonly REPO
 readonly CI_WORKFLOW="$REPO/.github/workflows/ci.yml"
 readonly VERSION_CATALOG="$REPO/gradle/libs.versions.toml"
@@ -160,7 +175,7 @@ verify_sha256() {
 
 ensure_prerequisites() {
   local tool
-  for tool in curl tar unzip sha256sum; do
+  for tool in git curl tar unzip sha256sum; do
     command -v "$tool" >/dev/null || die "missing required command: $tool"
   done
   mkdir -p "$DOWNLOADS" "$ROOT/tmp" "$ROOT/home" "$GRADLE_HOME" "$AAPT2_DIR"

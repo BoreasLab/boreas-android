@@ -16,13 +16,40 @@
 # pipeline stage runs in a subshell, so a piped `report` would increment its
 # failure count in a child and the script would exit 0 while printing FAIL.
 #
-# Assumes bash 4+, GNU grep, and GNU find. Reads the working tree, writes a report
-# to stdout and diagnostics to stderr, and exits nonzero if any property fails.
+# Assumes bash 4+, git, GNU grep, and GNU find. Reads the working tree, writes a
+# report to stdout and diagnostics to stderr, and exits nonzero if any property
+# fails.
 
 set -euo pipefail
 
-readonly ROOT="${1:-.}"
-cd "$ROOT"
+# No arguments. The gate checks one thing, the repository it lives in, so there
+# is nothing for a caller to point it at and no way to aim it somewhere else.
+(($# == 0)) || {
+  printf 'usage: %s\n' "${0##*/}" >&2
+  exit 2
+}
+
+# The repository these checks belong to.
+#
+# Asked of git, from the script's own directory, rather than assumed to be the
+# working directory. Anchoring on the caller's cwd means the answer changes with
+# where the script is invoked from, and the wrong answer is still a valid path:
+# run from a subdirectory it silently checks nothing, run from another checkout
+# it silently checks that one. git answers the question actually being asked.
+repo_root() {
+  local here
+  command -v git >/dev/null ||
+    { printf 'git is required to locate the repository\n' >&2; return 1; }
+  here="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)"
+  git -C "$here" rev-parse --show-toplevel 2>/dev/null ||
+    { printf 'not inside a git repository: %s\n' "$here" >&2; return 1; }
+}
+
+REPO="$(repo_root)"
+readonly REPO
+# Every path below is written relative to the repository root, and this is what
+# makes that true regardless of where the caller stood.
+cd "$REPO"
 
 readonly STRINGS="app/src/main/res/values/strings.xml"
 readonly DIMENS="app/src/main/java/dev/boreaslab/boreas/design/Dimens.kt"
