@@ -26,16 +26,7 @@ import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.ui.InstalledApp
 import dev.boreaslab.boreas.ui.PreviewSurface
 
-/**
- * Which apps use the tunnel.
- *
- * The default is that every app does, and the switch turns one off, so the control
- * reads the same way round as the sentence describing it.
- *
- * The list is virtualized and keyed by package name, which is stable across
- * filtering and reordering. An index key would move a switch's state to a different
- * app the first time the reader typed in the search field.
- */
+/** Per-app tunnel inclusion; stable package keys preserve switch state while filtering. */
 @Composable
 fun AppsScreen(
     apps: List<InstalledApp>?,

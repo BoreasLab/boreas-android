@@ -3,19 +3,11 @@ package dev.boreaslab.boreas.ui
 import java.util.Locale
 import kotlin.math.abs
 
-/**
- * Number and duration formatting for display.
- *
- * Kept as pure functions so a counter never formats itself differently in two
- * places, and so the formatting can be read without running the app. Grouping uses
- * the reader's locale; the units below are the binary ones the network stack
- * actually reports.
- */
+/** Locale-aware display formatting with binary byte units and stable widths. */
 
-/** 1 234 567 becomes "1,234,567" in an English locale. */
 fun formatCount(value: Long): String = String.format(Locale.getDefault(), "%,d", value)
 
-/** Bytes at three significant figures, so the column width stays stable. */
+/** Formats bytes with stable precision. */
 fun formatBytes(value: Long): String {
     val negative = value < 0
     var amount = abs(value).toDouble()
@@ -34,12 +26,7 @@ fun formatBytes(value: Long): String {
     return if (negative) "-$text" else text
 }
 
-/**
- * Elapsed time as h:mm:ss, or m:ss below an hour.
- *
- * Fixed-width fields so the digits do not reflow every second while the reader is
- * looking at them.
- */
+/** Elapsed time as h:mm:ss, or m:ss below an hour, with fixed-width fields. */
 fun formatDuration(millis: Long): String {
     val total = (millis / 1000).coerceAtLeast(0)
     val hours = total / 3600
@@ -52,6 +39,5 @@ fun formatDuration(millis: Long): String {
     }
 }
 
-/** Clock time for a recorded event, in the reader's 24 hour or 12 hour preference. */
 fun formatClockTime(millis: Long): String =
     java.text.DateFormat.getTimeInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(millis))

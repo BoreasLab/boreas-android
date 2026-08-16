@@ -33,21 +33,7 @@ import dev.boreaslab.boreas.design.Space
 import dev.boreaslab.boreas.design.Stroke
 import dev.boreaslab.boreas.design.Target
 
-/**
- * A labelled text field.
- *
- * The label sits above the field and stays there. A placeholder that doubles as a
- * label disappears exactly when the reader needs it and cannot be relied on for
- * recall, so this component has no placeholder parameter at all.
- *
- * Help text is always visible rather than hidden behind an icon, and the error
- * replaces it in the same position so nothing below the field moves when
- * validation resolves.
- *
- * @param error the problem with the current value, already turned into copy that
- *   names the fix. Presence of an error is announced through the semantics error
- *   property as well as shown, so it does not depend on seeing the color.
- */
+/** Labelled field with stable help/error space and semantic error reporting. */
 @Composable
 fun BoreasTextField(
     label: String,
@@ -101,7 +87,7 @@ fun BoreasTextField(
                 .semantics { if (error != null) this.error(error) },
         )
 
-        // One slot for help and error, so resolving a problem never shifts the layout.
+        // Share one slot so validation never shifts content below the field.
         if (error != null) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(Space.xs),

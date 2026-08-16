@@ -25,18 +25,7 @@ import dev.boreaslab.boreas.design.Space
 import dev.boreaslab.boreas.design.Stroke
 import dev.boreaslab.boreas.R
 
-/**
- * The state of anything that loads.
- *
- * A closed set rather than a bag of flags, so a container cannot be loading and
- * failed at once, and cannot silently render nothing. [Empty] and [Filtered] are
- * kept apart deliberately: "you have none" and "none match what you typed" need
- * different words and different actions, and collapsing them is the most common
- * way an empty screen ends up saying the wrong thing.
- *
- * There is no partial or paged variant. Nothing on this surface paginates, and a
- * state that can never be constructed is dead code rather than thoroughness.
- */
+/** Closed container states; [Empty] and [Filtered] need different copy and actions. */
 sealed interface ContainerState<out T> {
     data object Loading : ContainerState<Nothing>
     data class Failed(val message: String, val retry: (() -> Unit)? = null) : ContainerState<Nothing>
@@ -45,13 +34,6 @@ sealed interface ContainerState<out T> {
     data class Ready<T>(val value: T) : ContainerState<T>
 }
 
-/**
- * Renders a container's state, eliminating the set exhaustively.
- *
- * [empty] has no default because an empty state needs copy that names what belongs
- * there. The other branches have defaults that are complete designs rather than
- * placeholders, so a call site opts into different copy rather than out of a state.
- */
 @Composable
 fun <T> StateContainer(
     state: ContainerState<T>,
@@ -88,13 +70,7 @@ fun <T> StateContainer(
     }
 }
 
-/**
- * Waiting, announced politely.
- *
- * Shown in place rather than as an overlay, and only for waits long enough to be
- * worth acknowledging. Anything that resolves inside the flash threshold should
- * not reach this at all.
- */
+/** Inline loading state announced politely. */
 @Composable
 fun LoadingRegion(label: String?, modifier: Modifier = Modifier) {
     Row(
@@ -116,7 +92,6 @@ fun LoadingRegion(label: String?, modifier: Modifier = Modifier) {
     }
 }
 
-/** What belongs here, why it is worth having, and the one action that populates it. */
 @Composable
 fun EmptyState(
     icon: ImageVector,
@@ -151,17 +126,9 @@ fun EmptyState(
     }
 }
 
-/** How loud a notice is. A closed set; each tone carries its own icon. */
 enum class NoticeTone { Info, Warning, Danger }
 
-/**
- * A message the reader must act on or must not miss.
- *
- * Persistent and adjacent to its cause, never a toast. Every tone pairs a color
- * with an icon and a written title, so the tone survives being read in greyscale
- * or by someone who does not perceive the hue difference between the accent and
- * the danger role.
- */
+/** Persistent notice with icon and text, not color alone. */
 @Composable
 fun NoticeCard(
     tone: NoticeTone,

@@ -8,21 +8,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
-/**
- * Carries a consent request from the service to whichever Activity is on screen,
- * and the answer back.
- *
- * Consent needs an Activity result and the service has no window, so exactly one
- * object bridges them. The request flow has no replay: a request nobody was on
- * screen to answer is not queued for later, because a permission dialog appearing
- * minutes afterwards with no context is worse than none at all.
- *
- * The answer travels through a one-shot slot rather than a channel. A rendezvous
- * channel would make [deliver] suspend until someone received, so an answer
- * arriving after its start was cancelled would park a coroutine that nothing ever
- * wakes. Completing a [CompletableDeferred] cannot suspend and cannot leak: an
- * answer with no waiter is simply dropped.
- */
+/** Bridges service consent to the foreground Activity without replaying stale requests. */
 object ConsentBroker {
 
     val requests: SharedFlow<Intent>
@@ -31,13 +17,7 @@ object ConsentBroker {
     /** At most one consent request is outstanding; a newer one supersedes it. */
     private val pending = AtomicReference<CompletableDeferred<ConsentOutcome>?>(null)
 
-    /**
-     * Publishes the request and awaits its answer.
-     *
-     * Returns [ConsentOutcome.Unavailable] rather than waiting when no Activity is
-     * listening, so a start begun with no UI on screen fails fast instead of
-     * hanging until something happens to appear.
-     */
+    /** Fails fast when no Activity is listening instead of waiting indefinitely. */
     internal suspend fun request(intent: Intent): ConsentOutcome {
         val slot = CompletableDeferred<ConsentOutcome>()
         pending.getAndSet(slot)?.complete(ConsentOutcome.Unavailable)
@@ -59,21 +39,14 @@ object ConsentBroker {
     }
 }
 
-/**
- * The real gate. The one place VpnService.prepare is called.
- *
- * prepare returns null when permission is already granted, an Intent when the
- * dialog must be shown, and can be unavailable when device policy or another
- * always-on VPN holds the slot. Under always-on it returns null, because enabling
- * always-on in system settings is itself the grant.
- */
+/** Sole [VpnService.prepare] call; null means granted, an Intent means prompt. */
 class AndroidConsentGate(private val context: Context) : ConsentGate {
 
     override suspend fun request(): ConsentOutcome {
         val intent = try {
             VpnService.prepare(context)
         } catch (_: NullPointerException) {
-            // Some vendor images throw rather than return when VPN is unavailable.
+            // Some vendor images throw instead of returning when VPN is unavailable.
             return ConsentOutcome.Unavailable
         } ?: return ConsentOutcome.Granted
 

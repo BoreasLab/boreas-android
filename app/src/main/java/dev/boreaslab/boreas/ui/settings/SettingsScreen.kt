@@ -18,12 +18,6 @@ import dev.boreaslab.boreas.design.component.RowDivider
 import dev.boreaslab.boreas.ui.Destination
 import dev.boreaslab.boreas.ui.PreviewSurface
 
-/**
- * The index.
- *
- * Two groups, ordered by how often each is opened rather than by how the code is
- * arranged. Nothing here is more than one level from this screen.
- */
 @Composable
 fun SettingsScreen(
     onOpen: (Destination) -> Unit,

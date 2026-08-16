@@ -11,13 +11,6 @@ import androidx.compose.ui.semantics.semantics
 import dev.boreaslab.boreas.design.BoreasTheme
 import dev.boreaslab.boreas.design.Space
 
-/**
- * A heading with an optional line of explanation under it.
- *
- * The description is part of the header rather than a separate paragraph so the
- * two always move together and the gap between them stays smaller than the gap to
- * the content below, which is what makes them read as one group.
- */
 @Composable
 fun SectionHeader(
     title: String,
@@ -44,13 +37,7 @@ fun SectionHeader(
     }
 }
 
-/**
- * The small uppercase label.
- *
- * Deliberately rationed: at most one per screen, on the one region whose identity
- * is not obvious from its content. Above every heading it stops orienting anyone
- * and becomes decoration.
- */
+/** Small uppercase label, reserved for regions needing extra orientation. */
 @Composable
 fun Overline(
     text: String,

@@ -31,16 +31,7 @@ import dev.boreaslab.boreas.ui.formatBytes
 import dev.boreaslab.boreas.ui.formatClockTime
 import dev.boreaslab.boreas.ui.formatCount
 
-/**
- * What the tunnel has handled.
- *
- * Counters only. The core contract keeps packet payloads on the far side of the
- * boundary, so there is no flow list, no hostname, and no request log here to
- * build one from. What the engine reports is what this screen can show.
- *
- * Every counter carries the moment it started counting, because a total with no
- * window is a number nobody can act on.
- */
+/** Engine counters only; packet payloads never cross the boundary. */
 @Composable
 fun ActivityScreen(
     state: VpnLifecycleState,

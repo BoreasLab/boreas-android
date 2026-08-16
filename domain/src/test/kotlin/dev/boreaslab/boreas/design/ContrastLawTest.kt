@@ -5,18 +5,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
-/**
- * The accessibility floor, as an executable property rather than a claim in a
- * document.
- *
- * A design document can say a palette is compliant; only a test can keep it that
- * way after somebody nudges a token. Every pairing the interface renders is
- * folded over here, accumulating failures rather than stopping at the first, so
- * one run names every token that would have to change.
- */
 class ContrastLawTest {
 
-    /** Known values from the WCAG 2.2 definition, which anchor the implementation. */
     @Test
     fun `relative luminance matches the specification's endpoints`() {
         assertEquals(0.0, Srgb.of(0x000000).relativeLuminance(), 1e-9)
@@ -46,11 +36,6 @@ class ContrastLawTest {
     @Test
     fun `every dark theme pairing clears its threshold`() = assertPairingsHold("dark", DarkRoles)
 
-    /**
-     * Guards the one gap the fold cannot see: a role added to [ColorRoles] with no
-     * pairing declared for it would leave the law silently narrower than the
-     * interface.
-     */
     @Test
     fun `both themes declare the same pairing set`() {
         val light = LightRoles.pairings().map { it.describe }

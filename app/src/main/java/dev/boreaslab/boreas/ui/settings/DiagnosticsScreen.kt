@@ -37,12 +37,7 @@ import dev.boreaslab.boreas.ui.SettingsGroup
 import dev.boreaslab.boreas.ui.copyFor
 import dev.boreaslab.boreas.ui.formatClockTime
 
-/**
- * Lifecycle transitions, newest first.
- *
- * Clearing is reversible, so it happens immediately and offers undo rather than
- * asking a confirmation the reader would learn to dismiss without reading.
- */
+/** Newest-first lifecycle transitions; clearing is immediate and reversible. */
 @Composable
 fun DiagnosticsScreen(
     records: List<TransitionRecord>,
@@ -115,8 +110,8 @@ fun DiagnosticsScreen(
                         )
                     }
                 }
-                // `map` is inline, so the composable lookup is legal inside it;
-                // joinToString's transform is not, so the join happens after.
+                // Build transcript after mapping because composable lookup is not legal in
+                // joinToString's transform.
                 val transcript = list
                     .map { "${formatClockTime(it.atMillis)}  ${describe(it.state)}" }
                     .joinToString("\n")
@@ -146,7 +141,6 @@ fun DiagnosticsScreen(
     }
 }
 
-/** One line per state, naming the reason when there is one. */
 @Composable
 private fun describe(state: VpnLifecycleState): String = when (state) {
     VpnLifecycleState.Stopped -> stringResource(R.string.state_stopped)

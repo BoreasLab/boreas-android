@@ -8,14 +8,7 @@ import dev.boreaslab.boreas.model.TypedFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
-/**
- * The only host in a release build.
- *
- * The shared engine is not linked into this repository yet, so every start is
- * refused with a typed reason the surface can explain. This is not a stub standing
- * in for behavior that exists elsewhere: it is the accurate answer for a build
- * that carries the Kotlin half of the product.
- */
+/** Release host until shared engine is linked; every start returns a typed refusal. */
 public object UnlinkedEngineHost : EngineHost {
 
     override val isAvailable: Boolean = false

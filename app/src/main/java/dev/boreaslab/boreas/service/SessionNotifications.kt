@@ -7,53 +7,25 @@ import android.content.Intent
 import dev.boreaslab.boreas.MainActivity
 import dev.boreaslab.boreas.R
 
-/**
- * What the service should do about its notification. A closed set.
- *
- * [Promote] and [Post] are separated because promoting is not free at API 34 and
- * above: `startForeground` on a service typed `systemExempted` succeeds only while
- * the app satisfies one of that type's eligibility criteria, and the one this app
- * relies on is being the configured VPN. Deciding that here, where the states are
- * known, keeps the caller from re-deriving it from a lifecycle predicate that was
- * never about permissions.
- */
+/** Notification action; [Promote] is reserved for states eligible for foreground service. */
 sealed interface ForegroundIntent {
 
-    /** The session owns, or is about to own, a tunnel. Foreground is warranted. */
     data class Promote(val notification: Notification) : ForegroundIntent
 
-    /** Something to say, but no tunnel yet, so no promotion to go with it. */
     data class Post(val notification: Notification) : ForegroundIntent
 
     data object Dismiss : ForegroundIntent
 }
 
-/**
- * The foreground notification.
- *
- * Android requires a VPN to be a foreground service, so this is not a marketing
- * surface: it says which state the tunnel is in and offers the one action that
- * matters from outside the app. When the session is simulated it says so, because
- * a notification claiming a tunnel is running when no packet is being carried
- * would be the most damaging thing this build could tell someone.
- */
+/** Builds state-specific notifications; simulated sessions are labeled as such. */
 object SessionNotifications {
 
     const val CHANNEL_ID = "session"
     const val NOTIFICATION_ID = 1
 
     fun forState(context: Context, state: VpnLifecycleState): ForegroundIntent {
-        // Each state names its own copy, whether it warrants foreground, and whether
-        // stopping is offered. A guard separates the simulated session from the real
-        // one, so the two labels sit at the same level as every other state rather
-        // than one being reached through a conditional inside the other.
         val (title, promote, showStop) = when (state) {
-            // Consent has not been given, so the app is not the configured VPN and
-            // does not yet satisfy any systemExempted criterion. Promoting here is
-            // what would raise SecurityException, and it buys nothing: the reader is
-            // looking at the system's own permission dialog. The service was started
-            // while the app was in the foreground, so no promotion deadline is
-            // running against it either.
+            // Consent dialog is app-foreground and not VPN-eligible; do not promote before grant.
             VpnLifecycleState.AwaitingConsent ->
                 Triple(context.getString(R.string.notification_starting), false, false)
             VpnLifecycleState.Starting ->

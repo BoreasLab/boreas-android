@@ -26,21 +26,7 @@ import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import dev.boreaslab.boreas.ui.PreviewSurface
 
-/**
- * Android addressing for the tunnel interface.
- *
- * One column, labels above the fields, and no placeholder doing a label's job.
- * Entry is written through on every keystroke, so a half-typed address survives the
- * process being killed while the reader is in another app looking one up.
- *
- * Validation reports what is wrong and what would fix it, and it does so for the
- * whole draft at once rather than the first failure only, so a reader fixing two
- * fields is not sent round twice.
- *
- * The fields lock while a session is running, because the interface already holds
- * the values it was given. The lock is stated rather than left for the reader to
- * discover by tapping a field that will not focus.
- */
+/** Tunnel inputs; raw drafts persist, validation covers all fields, and active sessions lock them. */
 @Composable
 fun TunnelScreen(
     draft: TunnelDraft?,
@@ -74,8 +60,7 @@ fun TunnelScreen(
         }
 
         if (draft == null) {
-            // Reserved space for the one disk read, which normally resolves inside
-            // the flash threshold and shows nothing at all.
+            // Preserve layout while the initial draft loads.
             LoadingRegion(label = null)
             return@Column
         }
@@ -113,7 +98,6 @@ fun TunnelScreen(
     }
 }
 
-/** Every field problem, turned into a sentence that names the fix. */
 @Composable
 private fun copyFor(problem: FieldProblem): String = when (problem) {
     FieldProblem.Required -> stringResource(R.string.error_required)

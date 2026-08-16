@@ -14,24 +14,13 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The simulated host, which exists only so the control surface can be exercised
- * before the shared engine is linked.
- *
- * Two properties matter here and neither is about the numbers, which are generated
- * and describe nothing. A session must be distinguishable from the one before it,
- * because the controller drops a status update whose session does not match the one
- * it is holding, and identical ids defeat that check. And the host must not answer
- * for a session it never started, because inventing a stream from a default
- * configuration is the one thing this build promises not to do.
- */
+/** Verifies simulated session identity and absence of invented status streams. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SimulatedEngineHostTest {
 
     private val platform =
         (TunnelParse.of(TunnelDraft(), emptySet()) as TunnelParse.Valid).config
 
-    /** A clock that advances by one on every read, so two starts cannot share a tick. */
     private fun countingClock(): () -> Long {
         var now = 0L
         return { now++ }
@@ -50,8 +39,7 @@ class SimulatedEngineHostTest {
 
     @Test
     fun `two hosts do not mint the same identity`() = runTest {
-        // The service builds a host per start. An instance counter restarted at one
-        // every time, so every session in the transition log was called sim-1.
+        // Per-start hosts would reset an instance counter and reuse sim-1.
         val clock = countingClock()
         val first = SimulatedEngineHost(clock).start(EngineConfig(), platform)
         val second = SimulatedEngineHost(clock).start(EngineConfig(), platform)

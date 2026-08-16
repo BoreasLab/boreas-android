@@ -7,17 +7,7 @@ import dev.boreaslab.boreas.model.SessionStatus
 import dev.boreaslab.boreas.model.TypedFailure
 import dev.boreaslab.boreas.model.isRecoverable
 
-/**
- * Service state, as a closed sealed hierarchy.
- *
- * AGENTS.md requires this shape and forbids the alternative: "Keep service state a
- * closed Kotlin sealed hierarchy. Do not encode lifecycle state in nullable-field
- * bags or Boolean flags." Every screen eliminates it exhaustively, so a new variant
- * fails the build at each site that must render it.
- *
- * The variants match docs/platform-integration.md exactly. Only [Starting] may
- * establish a TUN and only [Running] may request a controlled configuration change.
- */
+/** Closed service-state hierarchy; [Starting] alone may establish TUN. */
 public sealed interface VpnLifecycleState {
 
     public data object Stopped : VpnLifecycleState
@@ -29,13 +19,7 @@ public sealed interface VpnLifecycleState {
     public data class Running(
         val session: SessionId,
         val status: SessionStatus,
-        /**
-         * The policy this session was started with.
-         *
-         * Held here so "your saved policy differs from the running one" is derived
-         * by comparing two values, rather than tracked as a third piece of state
-         * that has to be kept in step with both.
-         */
+        /** Policy used by this session, compared with saved policy when needed. */
         val applied: EngineConfig,
     ) : VpnLifecycleState
 
@@ -49,12 +33,7 @@ public sealed interface VpnLifecycleState {
     }
 }
 
-/**
- * True while a transition owns the session.
- *
- * The primary control reads this to show progress in place rather than swapping
- * itself for a spinner, so it never changes size or moves under the reader's thumb.
- */
+/** True while a transition owns the session; UI keeps the primary control in place. */
 public val VpnLifecycleState.isTransitional: Boolean
     get() = when (this) {
         VpnLifecycleState.AwaitingConsent,

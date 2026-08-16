@@ -17,20 +17,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("boreas")
 
-/**
- * Everything the reader has chosen, persisted.
- *
- * Preferences survive navigation, process death, and failure, which is why the
- * tunnel form stores its raw draft text rather than only a parsed value: a
- * half-typed entry is the reader's work and must not be destroyed by a validation
- * pass or by the process being killed while they are looking at another app.
- *
- * An enum is stored by name and read back through a total lookup, so an unknown or
- * corrupted value falls back to the default instead of throwing. The name is the
- * storage format, which is safe while nothing has shipped: renaming a constant
- * after the first release would silently reset every reader's choice, so from that
- * point a rename here needs a migration rather than a refactor.
- */
+/** Persists raw drafts and choices across navigation and process death. */
 class SettingsRepository(private val context: Context) {
 
     private object Keys {
@@ -47,7 +34,6 @@ class SettingsRepository(private val context: Context) {
 
     val engineConfig: Flow<EngineConfig> = context.dataStore.data.map(::decodeEngineConfig)
 
-    /** One decoder, shared by the read flow and the read-modify-write below. */
     private fun decodeEngineConfig(prefs: Preferences) = EngineConfig(
         profile = prefs[Keys.profile].toEnum(RuleProfile.entries, RuleProfile.Standard),
         inspectTls = prefs[Keys.inspectTls] ?: false,
@@ -69,25 +55,11 @@ class SettingsRepository(private val context: Context) {
     val simulationEnabled: Flow<Boolean> =
         context.dataStore.data.map { it[Keys.simulation] ?: false }
 
-    /**
-     * Whether the certificate install flow was completed.
-     *
-     * Android offers no way to read back which certificates sit in the personal
-     * store, so this records that the reader finished the install screen and
-     * nothing stronger. The Certificate screen says as much rather than presenting
-     * it as a verified fact.
-     */
+    /** Records completion only; Android does not expose personal-store contents. */
     val certificateInstallCompleted: Flow<Boolean> =
         context.dataStore.data.map { it[Keys.certificateInstalled] ?: false }
 
-    /**
-     * Applies [transform] to the stored configuration inside one transaction.
-     *
-     * The read and the write must not be separated: reading `.value` outside,
-     * transforming, then writing lets two fast changes interleave so the second
-     * overwrites the first with a stale base. DataStore's `edit` is the atomic
-     * primitive, so the transform has to run inside it.
-     */
+    /** Keeps read-modify-write inside DataStore's transaction to avoid stale overwrites. */
     suspend fun updateEngineConfig(transform: (EngineConfig) -> EngineConfig) {
         context.dataStore.edit { prefs ->
             val next = transform(decodeEngineConfig(prefs))
@@ -105,7 +77,6 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    /** Read-modify-write inside the transaction, for the same reason. */
     suspend fun updateExcludedPackages(transform: (Set<String>) -> Set<String>) {
         context.dataStore.edit { prefs ->
             prefs[Keys.excluded] = transform(prefs[Keys.excluded] ?: emptySet())
@@ -122,6 +93,6 @@ class SettingsRepository(private val context: Context) {
     }
 }
 
-/** Total lookup: an unknown stored name resolves to the default rather than throwing. */
+/** Unknown stored names resolve to the default rather than throwing. */
 private fun <T : Enum<T>> String?.toEnum(values: List<T>, fallback: T): T =
     values.firstOrNull { it.name == this } ?: fallback

@@ -1,18 +1,6 @@
 package dev.boreaslab.boreas.design
 
-/**
- * The color tokens, as pure values with a law attached.
- *
- * These live in the pure module rather than beside the Compose code for one
- * reason: the accessibility floor is a property of the palette, not of Android,
- * so it can be stated as a total function over data and checked by an ordinary
- * JVM test. `:app` derives every Compose `Color` from the roles below, so there
- * is one source of truth and the interface cannot render a color the law has
- * never seen.
- *
- * Steps come from the supplied palette's four ramps. The two exceptions are
- * documented at [MutedLight] and [MutedDark].
- */
+/** Pure palette tokens; contrast is checked in the domain module. */
 public object Ramp {
     public val Indigo800: Srgb = Srgb.of(0x19254D)
     public val Indigo900: Srgb = Srgb.of(0x0D1226)
@@ -34,18 +22,13 @@ public object Ramp {
     public val Rose600: Srgb = Srgb.of(0x8F3D3F)
 }
 
-/** space-indigo-800 blended 27% toward beige-50, the ratio light needs to clear body text on its densest surface. */
+/** Derived blend meeting body-text contrast on light surfaces. */
 private val MutedLight = Srgb.of(0x555E78)
 
-/** The same derivation at 55%, which is what dark needs. */
+/** Derived blend meeting body-text contrast on dark surfaces. */
 private val MutedDark = Srgb.of(0x949AA4)
 
-/**
- * Every color role, for one theme.
- *
- * A product of roles rather than a map keyed by name: a missing role is a
- * compile error, and no call site can ask for a role that does not exist.
- */
+/** Complete theme role set; missing roles fail at compile time. */
 public data class ColorRoles(
     val canvas: Srgb,
     val surface: Srgb,
@@ -109,17 +92,7 @@ public val DarkRoles: ColorRoles = ColorRoles(
     focus = Ramp.Beige50,
 )
 
-/**
- * Every pairing the interface renders, with the threshold each must clear.
- *
- * This is the contract the design owes its readers, written as data so a test
- * can fold over it. Adding a role without adding its pairings here is the one
- * gap this cannot catch, which is why the pairing count is asserted too.
- *
- * The focus ring is measured against the canvas rather than against the control
- * it surrounds: it is drawn outside the control with a gap, so the canvas is
- * what sits behind the ring pixels.
- */
+/** Rendered color pairings; focus is measured against the canvas behind its gap. */
 public fun ColorRoles.pairings(): List<Pairing> = listOf(
     Pairing("heading on page", ink, canvas, ContrastRequirement.BodyText),
     Pairing("heading on card", ink, surface, ContrastRequirement.BodyText),

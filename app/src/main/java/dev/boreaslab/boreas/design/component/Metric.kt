@@ -17,18 +17,7 @@ import dev.boreaslab.boreas.R
 import dev.boreaslab.boreas.design.BoreasTheme
 import dev.boreaslab.boreas.design.Space
 
-/**
- * One counter: what it counts on the left, the count on the right.
- *
- * The value is set in the monospaced face so digits hold their column while the
- * number changes, which is what stops a live counter from twitching sideways once
- * a second. Label and value are announced as one phrase rather than as two
- * unrelated fragments.
- *
- * @param caption a baseline, target, or note. A number with nothing to compare it
- *   against cannot be acted on, so where no baseline exists the caption says so
- *   rather than leaving the reader to assume one.
- */
+/** Counter row with stable digits and one combined accessibility announcement. */
 @Composable
 fun MetricRow(
     label: String,
@@ -38,9 +27,7 @@ fun MetricRow(
     valueColor: Color? = null,
 ) {
     val colors = BoreasTheme.colors
-    // Built from a resource rather than by concatenation: the separator between a
-    // label and its value is a translation decision, and a string joined in code is
-    // one no translator can reach.
+    // Resource controls label/value grammar in each locale.
     val description = if (caption != null) {
         stringResource(R.string.a11y_metric_captioned, label, value, caption)
     } else {
@@ -71,13 +58,6 @@ fun MetricRow(
     }
 }
 
-/**
- * A counter shown on the inverted session surface.
- *
- * A separate composable rather than a color parameter on [MetricRow]: the session
- * surface does not follow the theme, so its text roles are their own set and are
- * not something a call site should be able to pass in piecemeal.
- */
 @Composable
 fun SessionMetric(
     label: String,

@@ -11,19 +11,7 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.sp
 import dev.boreaslab.boreas.R
 
-/**
- * The display/text split from the supplied design document: a serif for display
- * sizes at weight 400 with negative tracking, a humanist sans for everything else.
- *
- * Copernicus and StyreneB are licensed and cannot ship here. These are the
- * substitutes the document itself names: EB Garamond for the serif and Inter for
- * the sans, both under the SIL Open Font License, plus JetBrains Mono for counters
- * and identifiers. This is an approximation of the brand's voice, not the brand's
- * own typefaces. License texts ship in assets/licenses.
- *
- * All three are variable fonts, subset to Latin and pinned to one optical size, so
- * one file per family covers every weight in use (240KB total).
- */
+/** Display serif, sans text, and mono counters using the supplied licensed substitutes. */
 private fun serif(weight: Int) = Font(
     R.font.boreas_serif,
     FontWeight(weight),
@@ -52,12 +40,7 @@ private val Trim = LineHeightStyle(
     trim = LineHeightStyle.Trim.None,
 )
 
-/**
- * Eleven steps. The document declares fourteen; its 64px and 48px display sizes are
- * desktop marketing values with no role on a handheld, and its 22px title-lg
- * duplicated display-sm at this scale. Sizes are in sp, so they honor the reader's
- * text-size preference.
- */
+/** Eleven handheld type steps in sp, honoring reader text-size preferences. */
 @Immutable
 data class BoreasTypography(
     val displayLg: TextStyle,
@@ -113,7 +96,7 @@ internal val BoreasType = BoreasTypography(
         fontFamily = BoreasSans, fontWeight = FontWeight.W500,
         fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 1.5.sp,
     ),
-    // Counters and identifiers. Monospaced, so digits hold their column while updating.
+    // Monospaced counters keep digits aligned while updating.
     code = TextStyle(
         fontFamily = BoreasMono, fontWeight = FontWeight.W400,
         fontSize = 14.sp, lineHeight = 22.sp,

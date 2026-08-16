@@ -32,14 +32,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * One installed app, as the Apps screen needs it.
- *
- * [searchKey] is folded in when the list loads rather than recomputed per
- * keystroke: lowercasing a label allocates a String, and doing that for every app
- * on every character typed is work proportional to list size times query length
- * for a result that never changes.
- */
+/** Installed app with a precomputed lowercase search key. */
 data class InstalledApp(
     val packageName: String,
     val label: String,
@@ -51,16 +44,7 @@ data class InstalledApp(
     }
 }
 
-/**
- * The single state holder for the whole surface.
- *
- * Effects live here and nowhere below: sending a command to the service, reading
- * the package manager, and writing preferences. Everything under this is a pure
- * function of its inputs, which is what makes the screens previewable in isolation.
- *
- * Nothing here decides anything about packets. Commands go one way and typed state
- * comes back the other, exactly as docs/core-contract.md requires of the UI.
- */
+/** Owns UI effects; screens receive state and callbacks only. */
 class BoreasViewModel(private val app: Application) : ViewModel() {
 
     private val settings = SettingsRepository(app)
@@ -83,22 +67,11 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     val excludedPackages: StateFlow<Set<String>> =
         settings.excludedPackages.stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
-    /**
-     * The tunnel form's live text.
-     *
-     * Seeded from storage once and edited in memory afterwards, so a keystroke does
-     * not race a disk write. It is written back on every change, which is what makes
-     * a half-typed entry survive the process being killed in the background.
-     */
+    /** Raw draft loads once, then writes asynchronously so typing survives process death. */
     val tunnelDraft: StateFlow<TunnelDraft?>
         field = MutableStateFlow<TunnelDraft?>(null)
 
-    /**
-     * Validation of the live draft.
-     *
-     * Derived during collection rather than stored, so it can never disagree with
-     * the text it describes.
-     */
+    /** Derived from the current draft, never stored separately. */
     val tunnelParse: StateFlow<TunnelParse?> =
         combine(tunnelDraft, excludedPackages) { draft, excluded ->
             draft?.let { TunnelParse.of(it, excluded) }
@@ -110,7 +83,7 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     val appSearch: StateFlow<String>
         field = MutableStateFlow("")
 
-    /** Apps matching the current search, indexed once per query rather than per row. */
+    /** Filters pre-indexed app keys once per query. */
     val visibleApps: StateFlow<List<InstalledApp>?> =
         combine(installedApps, appSearch) { apps, query ->
             if (apps == null) return@combine null
@@ -123,8 +96,7 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
         viewModelScope.launch { tunnelDraft.value = settings.tunnelDraft.first() }
     }
 
-    // Session commands. Both are idempotent at the service, so a repeated tap
-    // coalesces there rather than being guarded here with a flag that could drift.
+    // Service coalesces repeated commands; do not add a second guard here.
 
     fun startTunnel() {
         app.startService(Intent(app, BoreasVpnService::class.java).setAction(BoreasVpnService.ACTION_START))
@@ -134,10 +106,8 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
         app.startService(Intent(app, BoreasVpnService::class.java).setAction(BoreasVpnService.ACTION_STOP))
     }
 
-    /** Completing the pending slot cannot suspend, so this needs no coroutine. */
+    /** Deferred completion is non-suspending. */
     fun deliverConsent(outcome: ConsentOutcome) = ConsentBroker.deliver(outcome)
-
-    // Preferences.
 
     fun setProfile(profile: RuleProfile) = updateEngineConfig { it.copy(profile = profile) }
 
@@ -154,13 +124,7 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
         viewModelScope.launch { settings.setTunnelDraft(draft) }
     }
 
-    /**
-     * The Apps screen's search text.
-     *
-     * A method rather than a publicly mutable flow, so this holder is the only
-     * writer of every cell it exposes and the screens stay pure functions of what
-     * they are given.
-     */
+    /** Keeps app search state write-owned by this holder. */
     fun setAppSearch(query: String) {
         appSearch.value = query
     }
@@ -183,18 +147,7 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
 
     fun restoreTransitions(records: List<TransitionRecord>) = SessionStateBus.restoreLog(records)
 
-    /**
-     * Reads the launcher-visible app list off the main thread.
-     *
-     * One `queryIntentActivities` call answers "which apps does the reader see in
-     * their launcher", instead of asking the package manager the same question once
-     * per installed app: that inner call is a binder round trip, so the loop was
-     * paying hundreds of IPCs to compute what a single query already returns.
-     *
-     * $O(n)$ label loads, which is irreducible because a name has to come from
-     * somewhere, plus one IPC for the set itself. Sorted with a collator built
-     * once rather than per comparison.
-     */
+    /** One launcher query avoids per-app package-manager IPC; sorting reuses one collator. */
     fun loadInstalledApps() {
         if (installedApps.value != null) return
         viewModelScope.launch {
@@ -223,6 +176,5 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     }
 }
 
-/** Whether the saved policy differs from the one the running session started with. */
 fun VpnLifecycleState.pendingPolicyChange(saved: EngineConfig): Boolean =
     this is VpnLifecycleState.Running && applied != saved

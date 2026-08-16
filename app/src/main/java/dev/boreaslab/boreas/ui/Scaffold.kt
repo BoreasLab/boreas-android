@@ -34,13 +34,6 @@ import dev.boreaslab.boreas.design.Stroke
 import dev.boreaslab.boreas.design.component.BoreasButton
 import dev.boreaslab.boreas.design.component.ButtonVariant
 
-/**
- * The screen frame.
- *
- * One title, in the serif display face, matching the navigation label exactly.
- * Detail screens carry a back control in the same slot rather than a second
- * pattern, so the frame is one shape everywhere.
- */
 @Composable
 fun ScreenScaffold(
     title: String,
@@ -79,12 +72,6 @@ fun ScreenScaffold(
     }
 }
 
-/**
- * The navigation bar.
- *
- * Four peers, which is inside the range a bar handles well. The current location is
- * carried by the label's weight and a filled indicator, not by color alone.
- */
 @Composable
 fun BoreasNavigationBar(
     current: String?,
@@ -127,7 +114,6 @@ fun BoreasNavigationBar(
     }
 }
 
-/** A labelled group of rows, separated from its neighbours by space rather than a box. */
 @Composable
 fun SettingsGroup(
     title: String,

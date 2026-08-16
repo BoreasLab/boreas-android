@@ -6,14 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
-/**
- * Parsing at the untrusted entry.
- *
- * Two properties are being held here. Values are accepted whenever the reader's
- * intent is unambiguous, because reformatting is the system's job. And a value that
- * is genuinely wrong produces the specific problem naming the fix, not a blanket
- * rejection.
- */
+/** Verifies normalization at the untrusted boundary and precise field errors. */
 class ConfigParsingTest {
 
     private fun <T> valueOf(parsed: Parsed<T>): T = (parsed as Parsed.Valid<T>).value
@@ -42,12 +35,10 @@ class ConfigParsingTest {
 
     @Test
     fun `an octet too large for an Int is still a range problem`() {
-        // Every character is a digit, so the shape was never in question. Converting
-        // before checking length reported this as a shape problem and sent the
-        // reader to fix punctuation that was already correct.
+        // Digit-only overflow remains a range error, not a shape error.
         assertEquals(FieldProblem.AddressRange, problemOf(Ipv4Address.parse("10.0.0.99999999999")))
         assertEquals(FieldProblem.AddressRange, problemOf(Ipv4Address.parse("2147483648.0.0.1")))
-        // Zero padding is normalization, not size: the value is 2, so it parses.
+        // Zero padding is normalization.
         assertEquals("10.0.0.2", valueOf(Ipv4Address.parse("10.0.0.00000002")).text)
     }
 
@@ -73,8 +64,7 @@ class ConfigParsingTest {
             excludedPackages = emptySet(),
         )
 
-        // The type is what stops a trusted value escaping an invalid draft: there
-        // is no PlatformConfig on this branch to reach for.
+        // Invalid branch exposes no trusted PlatformConfig.
         val invalid = parse as TunnelParse.Invalid
         assertEquals(FieldProblem.AddressShape, invalid.problems[TunnelField.Address])
         assertEquals(FieldProblem.MtuRange, invalid.problems[TunnelField.Mtu])

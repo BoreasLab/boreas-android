@@ -14,13 +14,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
-/**
- * True when the reader has turned animations off at the OS level.
- *
- * Read at the point of use rather than cached at startup, so a mid-session change
- * takes effect. Reduced motion removes movement only; nothing here gates content,
- * state, or an affordance behind an animation.
- */
+/** OS reduced-motion setting, read at use so mid-session changes take effect. */
 val LocalReducedMotion = compositionLocalOf { false }
 
 @Composable
@@ -31,31 +25,7 @@ private fun systemReducedMotion(): Boolean {
     }
 }
 
-/**
- * One theme, set once at the root, following the system.
- *
- * There is deliberately no in-app light/dark setting. An app-level override is a
- * second place the answer can live, and the two disagree the moment the reader
- * changes the system and forgets this: they then carry a preference they set once
- * and cannot remember setting. The window background in `res/values-night` already
- * followed the system unconditionally, so an override also meant a cold start
- * painted one theme and Compose replaced it with the other.
- *
- * [isSystemInDarkTheme] is read during composition rather than captured, and the
- * Activity declares `uiMode` in `configChanges`, so a system change recomposes this
- * tree in place instead of restarting anything.
- *
- * Material 3 is the only component system in the tree. Its color scheme and
- * typography are derived from the Boreas tokens below so that the components this
- * surface does use (navigation bar, switch, dialog, snackbar) inherit the same
- * values rather than carrying a second palette. Roles Material has no slot for
- * (the session surface, the decorative hairline against the control border, the
- * offset focus ring) live on [BoreasColors] and are read through [BoreasTheme].
- *
- * @param dark defaults to the system's answer, which is the only value production
- *   ever passes. It is a parameter so a `@Preview` can render both without the app
- *   carrying a setting that exists for tooling.
- */
+/** System-following theme with no in-app override; [dark] exists for previews. */
 @Composable
 fun BoreasTheme(
     dark: Boolean = isSystemInDarkTheme(),

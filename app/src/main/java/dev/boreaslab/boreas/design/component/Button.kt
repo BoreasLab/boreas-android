@@ -34,31 +34,20 @@ import dev.boreaslab.boreas.design.Space
 import dev.boreaslab.boreas.design.Stroke
 import dev.boreaslab.boreas.design.Target
 
-/**
- * The one button.
- *
- * Varies along a single closed axis. A second axis would be composition, not a
- * flag: a button that needed a different structure would be a different component.
- */
+/** Button variants; structural changes belong in separate components. */
 enum class ButtonVariant {
-    /** The accent fill. One per view, on the action that view exists for. */
     Primary,
 
-    /** Outlined. Every action that is not the primary one. */
     Secondary,
 
-    /** No fill, no outline. Inline actions inside a card or a row. */
     Quiet,
 
-    /** Outlined in the danger role. Carries an icon so color is never the only signal. */
+    /** Danger actions pair color with an icon. */
     Danger,
 }
 
 /**
- * @param loading keeps the label in place and adds an indicator beside it, so the
- *   control neither resizes nor moves under a thumb already on its way down.
- * @param enabled false is rare here. Where a control would be disabled, the
- *   surrounding copy says what would make it available.
+ * @param loading keeps label position stable while work is in progress.
  */
 @Composable
 fun BoreasButton(

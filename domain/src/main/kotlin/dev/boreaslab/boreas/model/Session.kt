@@ -1,22 +1,14 @@
 package dev.boreaslab.boreas.model
 
-/** Identity of one engine session. Opaque to the Android shell. */
+/** Opaque identity of one engine session. */
 @JvmInline
 public value class SessionId(public val value: String)
 
-/** Where the engine sends upstream traffic. Part of EngineConfig, shown as status. */
 public enum class UpstreamRoute { Direct, Proxy }
 
 /**
- * An immutable status snapshot.
- *
- * The core contract says a snapshot returns "immutable status and bounded counters"
- * and "never returns packet payloads". Nothing here is a packet, a hostname, or a
- * flow record; these are counts and one enum.
- *
- * [simulated] is true when the values were generated in the app rather than
- * reported by an engine. Every screen that shows a counter must show that marker
- * too, so a generated number can never be read as a measured one.
+ * Immutable counters and status; [simulated] prevents generated values being read
+ * as measured traffic.
  */
 public data class SessionStatus(
     val startedAtMillis: Long,

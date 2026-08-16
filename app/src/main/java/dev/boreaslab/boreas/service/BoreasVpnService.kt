@@ -19,22 +19,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * The only owner of Android VPN consent, interface creation, foreground-service
- * compliance, routes, and lifecycle callbacks.
+ * Owns Android VPN consent, interface, foreground-service, route, and lifecycle effects.
  *
- * A thin effect interpreter, as docs/platform-integration.md requires. It holds no
- * policy, parses nothing about packets, and never sees one. It turns typed
- * commands into Android effects and publishes typed state back.
- *
- * What this class deliberately does not do yet, and why:
- *
- *  - It does not call VpnService.Builder.establish(). Building the interface is A3
- *    work, gated on a real-device loopback and DNS fixture.
- *  - It does not call ParcelFileDescriptor.detachFd(). A descriptor has exactly one
- *    owner at every instant, and detaching one with no native owner on the far side
- *    would create a descriptor nothing is responsible for closing.
- *  - It does not implement the protect(fd) callback. That seam belongs with the
- *    native bridge that needs it.
+ * Packet policy and descriptor handoff remain native. TUN creation, `detachFd()`, and
+ * `protect(fd)` wait for the native bridge and its descriptor owner.
  */
 class BoreasVpnService : VpnService() {
 
@@ -54,31 +42,13 @@ class BoreasVpnService : VpnService() {
         mirrorStateToBus()
     }
 
-    /**
-     * The unlinked host is the only one a release build can construct.
-     *
-     * The simulated host exists so this surface can be reviewed before A2 links the
-     * real engine. The BuildConfig constant keeps it out of release, and even in
-     * debug it stays off until the reader turns it on under Diagnostics.
-     *
-     * Resolved inside the start coroutine, so reading the preference never blocks
-     * the main thread.
-     */
+    /** Release uses the unlinked host; simulation is a debug-only explicit opt-in. */
     private suspend fun selectEngine(): EngineHost {
         if (!BuildConfig.SIMULATION_AVAILABLE) return UnlinkedEngineHost
         return if (settings.simulationEnabled.first()) SimulatedEngineHost() else UnlinkedEngineHost
     }
 
-    /**
-     * What an incoming Intent means. Parsed once, at the boundary.
-     *
-     * `onStartCommand` receives Intents from three sources with different
-     * authority, and telling them apart is a correctness matter rather than
-     * tidiness: Android starts an always-on VPN by calling `startService()` with
-     * no action of ours, and a sticky restart redelivers a null Intent entirely.
-     * Matching only on our own actions silently ignores both, which is exactly how
-     * an always-on VPN ends up never starting.
-     */
+    /** Distinguishes explicit commands from Android always-on and sticky-restart intents. */
     private sealed interface ServiceRequest {
         data object Start : ServiceRequest
         data object Stop : ServiceRequest
@@ -88,9 +58,7 @@ class BoreasVpnService : VpnService() {
     private fun parseRequest(intent: Intent?): ServiceRequest = when (intent?.action) {
         ACTION_START -> ServiceRequest.Start
         ACTION_STOP -> ServiceRequest.Stop
-        // No action of ours: Android starting an always-on VPN, or a sticky
-        // restart of one. Honored only while always-on is actually on, so a stray
-        // Intent can never raise a tunnel nobody asked for.
+        // Null action means Android start or sticky restart; honor it only when always-on.
         null -> if (isAlwaysOn) ServiceRequest.Start else ServiceRequest.Ignore
         else -> ServiceRequest.Ignore
     }
@@ -104,18 +72,10 @@ class BoreasVpnService : VpnService() {
             ServiceRequest.Ignore -> Unit
         }
 
-        // Under always-on, Android's contract is that this tunnel stays up, so a
-        // process death should bring it back. Otherwise it must not: a tunnel that
-        // silently reappears is one nobody asked for.
+        // Always-on services restart after process death; ordinary starts must not reappear.
         return if (isAlwaysOn) START_STICKY else START_NOT_STICKY
     }
 
-    /**
-     * Reads always-on state from the running service.
-     *
-     * Both queries arrive at API 29, which is this app's minimum, so there is no
-     * version branch here and no unknown case to represent.
-     */
     private fun readAlwaysOn(): AlwaysOn =
         if (isAlwaysOn) AlwaysOn.On(lockdown = isLockdownEnabled) else AlwaysOn.Off
 
@@ -124,10 +84,8 @@ class BoreasVpnService : VpnService() {
         val draft = settings.tunnelDraft.first()
         val excluded = settings.excludedPackages.first()
 
-        // Parsed once, at the untrusted entry. A session starts only with a value
-        // already refined into an immutable trusted type. A rejection travels back
-        // through the controller rather than being written to the state stream
-        // from here, so the observable state keeps exactly one writer.
+        // Parse at the untrusted boundary; return rejection through the controller so it
+        // remains the sole state writer.
         val command = when (val parse = TunnelParse.of(draft, excluded)) {
             is TunnelParse.Valid -> SessionCommand.Start(engineConfig, parse.config)
             is TunnelParse.Invalid ->
@@ -136,12 +94,7 @@ class BoreasVpnService : VpnService() {
         controller.submit(command)
     }
 
-    /**
-     * Publishes controller state to the UI and drives the foreground notification.
-     *
-     * A new counter snapshot for the session already running is not a transition,
-     * so it updates the state without adding a diagnostics entry every second.
-     */
+    /** Publishes lifecycle transitions and counter updates without logging every tick. */
     private fun mirrorStateToBus() {
         scope.launch {
             var previous: VpnLifecycleState? = null
@@ -163,15 +116,7 @@ class BoreasVpnService : VpnService() {
         }
     }
 
-    /**
-     * Applies the notification decision the state already carries.
-     *
-     * Nothing is re-derived here. The previous shape asked whether the state was
-     * transitional to decide between promoting and posting, which mixed a question
-     * about the interface with one about foreground-service eligibility, and the
-     * posting branch turned out to be unreachable because every state that wanted a
-     * notification also answered yes to that predicate.
-     */
+    /** Applies the state-carried notification decision without re-deriving eligibility. */
     private fun applyForeground(state: VpnLifecycleState) {
         val notifications = getSystemService(NotificationManager::class.java)
         when (val intent = SessionNotifications.forState(this, state)) {
@@ -183,23 +128,15 @@ class BoreasVpnService : VpnService() {
 
             ForegroundIntent.Dismiss -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
-                // stopForeground only removes a notification this service was
-                // promoted with. One that arrived through notify() has to be
-                // cancelled, or a declined consent leaves "Starting the tunnel" on
-                // screen with nothing behind it.
+                // stopForeground cannot remove notify()'d notifications; cancel both paths.
                 notifications.cancel(SessionNotifications.NOTIFICATION_ID)
-                // Under always-on, Android owns this service's lifetime and will
-                // start it again; stopping ourselves would only fight it.
+                // Always-on owns service lifetime; ordinary sessions may stop themselves.
                 if (!isAlwaysOn) stopSelf()
             }
         }
     }
 
-    /**
-     * Android revoked the interface, usually because another VPN took the slot.
-     *
-     * Treated as a stop rather than a failure: nothing went wrong here.
-     */
+    /** VPN slot was revoked; report a stop because the service did not fail. */
     override fun onRevoke() {
         controller.submit(SessionCommand.Stop)
         super.onRevoke()
@@ -211,8 +148,7 @@ class BoreasVpnService : VpnService() {
     }
 
     companion object {
-        // Derived from the application id rather than written out, so the two
-        // cannot drift apart and a rename cannot leave a dead intent filter.
+        // Derive actions from application ID so package renames cannot leave stale filters.
         const val ACTION_START = BuildConfig.APPLICATION_ID + ".START"
         const val ACTION_STOP = BuildConfig.APPLICATION_ID + ".STOP"
     }

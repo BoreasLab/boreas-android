@@ -1,14 +1,6 @@
 package dev.boreaslab.boreas.model
 
-/**
- * Configuration values, parsed once at the untrusted entry and immutable after.
- *
- * The core contract requires each configuration to be "parsed once at its untrusted
- * entry" and to "become an immutable trusted value before the service starts". The
- * types below carry that rule: [Mtu] and [Ipv4Address] have private constructors,
- * so the only way to hold one is to have parsed it, and a screen cannot hand the
- * service a value it never validated.
- */
+/** Parsed once at the untrusted boundary, then immutable. */
 
 /** A validated result, or the one problem that stopped it validating. */
 public sealed interface Parsed<out T> {
@@ -34,11 +26,7 @@ public value class Ipv4Address private constructor(public val text: String) {
     override fun toString(): String = text
 
     public companion object {
-        /**
-         * Parses liberally. Surrounding whitespace, a stray leading or trailing dot,
-         * and zero padding are all normalized rather than rejected, because
-         * reformatting is the system's job and not the reader's.
-         */
+        /** Normalizes surrounding whitespace, edge dots, and zero padding. */
         public fun parse(raw: String): Parsed<Ipv4Address> {
             val trimmed = raw.trim().trim('.')
             if (trimmed.isEmpty()) return Parsed.Invalid(FieldProblem.Required)
@@ -48,11 +36,7 @@ public value class Ipv4Address private constructor(public val text: String) {
                 return Parsed.Invalid(FieldProblem.AddressShape)
             }
 
-            // Every part is now known to be a non-empty run of digits, so the only
-            // remaining way to be wrong is to be too large. Length is checked before
-            // conversion because "99999999999" overflows Int: converting first would
-            // report a well-formed but oversized octet as a shape problem, and send
-            // the reader to fix punctuation that was never wrong.
+            // Check digit length before Int conversion so oversized octets report range, not shape.
             if (parts.any { it.trimStart('0').length > 3 }) {
                 return Parsed.Invalid(FieldProblem.AddressRange)
             }
@@ -83,12 +67,7 @@ public value class Mtu private constructor(public val bytes: Int) {
     }
 }
 
-/**
- * What the tunnel form holds while the reader is typing.
- *
- * Kept as raw text so a half-typed value is never destroyed by validation, and so
- * the entry survives navigation and process death unchanged.
- */
+/** Raw form text preserves half-typed values across validation and process death. */
 public data class TunnelDraft(
     val address: String = "10.24.0.2",
     val mtu: String = "1500",
@@ -103,15 +82,7 @@ public data class TunnelDraft(
     }
 }
 
-/**
- * The outcome of parsing a whole draft.
- *
- * A sum rather than a nullable value beside a problem map: with a product, every
- * consumer has to re-derive "did this work" from a null check, and one of them
- * will branch on it differently. Here the two outcomes are eliminated
- * exhaustively and a trusted [PlatformConfig] exists only on the branch that has
- * one.
- */
+/** Parsed configuration or field problems. */
 public sealed interface TunnelParse {
 
     public data class Valid(val config: PlatformConfig) : TunnelParse
@@ -134,13 +105,7 @@ public fun TunnelParse.problemFor(field: TunnelField): FieldProblem? = when (thi
     is TunnelParse.Invalid -> problems[field]
 }
 
-/**
- * Android addressing for the tunnel interface. Owns no filtering policy.
- *
- * Routes are fixed to the whole address space here. Route selection is A3 work in
- * docs/implementation-plan.md and needs a device gate, so it is not exposed as a
- * control that would imply it had been tested.
- */
+/** Android tunnel addressing; route selection remains A3 work. */
 public data class PlatformConfig(
     val address: Ipv4Address,
     val mtu: Mtu,
@@ -161,7 +126,7 @@ public data class PlatformConfig(
                 is Parsed.Invalid -> null.also { problems[TunnelField.Mtu] = r.problem }
             }
 
-            // Empty means "keep whatever the network supplies", which is valid.
+            // Empty means use network-provided DNS.
             val dnsEntries = draft.dns.split('\n', ',', ' ')
                 .map(String::trim)
                 .filter(String::isNotEmpty)
@@ -189,13 +154,7 @@ public data class PlatformConfig(
 /** How much the engine acts on what it sees. */
 public enum class RuleProfile { Off, Standard, Strict }
 
-/**
- * Policy and egress choices handed to the engine at start.
- *
- * The field set is provisional. The core contract defers naming and serialization
- * to the core FFI crate, so these must be reconciled against the versioned core
- * interface in A2 rather than treated as settled.
- */
+/** Engine policy and egress values; field set remains provisional until core FFI A2. */
 public data class EngineConfig(
     val profile: RuleProfile = RuleProfile.Standard,
     val inspectTls: Boolean = false,

@@ -9,12 +9,7 @@ import androidx.compose.ui.Modifier
 import dev.boreaslab.boreas.design.BoreasTheme
 import dev.boreaslab.boreas.design.Space
 
-/**
- * The canvas a preview renders on.
- *
- * Previews exist so both themes get looked at rather than only the one being built
- * in. Every screen below carries a light and a dark preview for that reason.
- */
+/** Shared preview canvas; screens render both themes. */
 @Composable
 fun PreviewSurface(
     dark: Boolean = false,

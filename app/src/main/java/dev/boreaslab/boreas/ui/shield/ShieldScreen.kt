@@ -44,17 +44,6 @@ import dev.boreaslab.boreas.ui.formatDuration
 import dev.boreaslab.boreas.ui.labelFor
 import kotlinx.coroutines.delay
 
-/**
- * The primary control.
- *
- * The screen answers one question, so it is built around one answer: whether
- * traffic is being carried through the tunnel right now. The state occupies the
- * inverted surface at the top, and the single action sits at the bottom where a
- * thumb reaches it. Everything else on this screen exists to explain the state or
- * to offer the next step after a failure.
- *
- * Two taps to protected traffic on first run, one on every run after.
- */
 @Composable
 fun ShieldScreen(
     state: VpnLifecycleState,
@@ -109,13 +98,6 @@ fun ShieldScreen(
     }
 }
 
-/**
- * The state, on the inverted surface.
- *
- * Spent once per screen, on the one thing the screen is about. The headline is set
- * in the serif display face at the largest step in the scale, which is the whole
- * hierarchy argument on this screen: nothing else competes with it.
- */
 @Composable
 private fun SessionCard(
     state: VpnLifecycleState,
@@ -142,8 +124,7 @@ private fun SessionCard(
         is VpnLifecycleState.Failed -> stringResource(copyFor(state.failure).title)
     }
 
-    // Running is the one state the accent marks. Everywhere else the headline is
-    // the session surface's own ink, so the accent keeps meaning "this is on".
+    // Accent marks only Running, preserving its meaning as "this is on".
     val headlineColor by animateColorAsState(
         targetValue = if (state is VpnLifecycleState.Running) {
             colors.sessionPrimary
@@ -183,9 +164,7 @@ private fun SessionCard(
             RunningDetail(state, modifier = Modifier.padding(top = Space.lg))
         }
 
-        // Named only when it is on. Off is the default nobody needs telling about,
-        // and unobserved is a Settings concern rather than something to qualify the
-        // headline with here.
+        // Show only On; Off is the default and Unobserved belongs to Settings.
         if (alwaysOn is AlwaysOn.On) {
             SessionMetric(
                 label = stringResource(R.string.shield_always_on),
@@ -204,7 +183,6 @@ private fun SessionCard(
 
 @Composable
 private fun RunningDetail(state: VpnLifecycleState.Running, modifier: Modifier = Modifier) {
-    // Ticks only while a session is running, and stops the moment it is not.
     var now by remember(state.session) { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(state.session) {
         while (true) {

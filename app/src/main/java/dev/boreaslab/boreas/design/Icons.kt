@@ -8,18 +8,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
-/**
- * The icon family.
- *
- * Authored here rather than pulled from an icon dependency, because one family at
- * one weight is a requirement and mixing a shipped set with a few custom glyphs is
- * how that requirement is usually broken. Every glyph below is drawn on the same
- * 24 unit grid at [WEIGHT] stroke with round caps and joins, so they sit together
- * without optical correction.
- *
- * Icons carry no information on their own here. Every one of them accompanies a
- * text label, so nothing is conveyed by shape alone.
- */
+/** Custom icon family on one 24-unit grid and stroke; every icon accompanies text. */
 private const val WEIGHT = 2f
 
 private fun icon(name: String, vararg paths: String): ImageVector =

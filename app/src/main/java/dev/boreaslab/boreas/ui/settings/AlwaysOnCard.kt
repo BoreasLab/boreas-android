@@ -18,7 +18,6 @@ import dev.boreaslab.boreas.design.component.ButtonVariant
 import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.ui.PreviewSurface
 
-/** Headline and explanation for each always-on state. Eliminated exhaustively. */
 private data class AlwaysOnCopy(@param:StringRes val state: Int, @param:StringRes val detail: Int)
 
 private fun copyFor(alwaysOn: AlwaysOn): AlwaysOnCopy = when (alwaysOn) {
@@ -30,9 +29,7 @@ private fun copyFor(alwaysOn: AlwaysOn): AlwaysOnCopy = when (alwaysOn) {
         R.string.always_on_state_off,
         R.string.always_on_state_off_detail,
     )
-    // A guard, so lockdown reads as a fourth case beside the other three rather
-    // than as a conditional nested inside one of them. The unguarded On branch
-    // below keeps the elimination exhaustive.
+    // Keep lockdown as an explicit case in the exhaustive mapping.
     is AlwaysOn.On if alwaysOn.lockdown -> AlwaysOnCopy(
         R.string.always_on_state_lockdown,
         R.string.always_on_state_lockdown_detail,
@@ -43,21 +40,7 @@ private fun copyFor(alwaysOn: AlwaysOn): AlwaysOnCopy = when (alwaysOn) {
     )
 }
 
-/**
- * Always-on VPN: what Android is doing, and where to change it.
- *
- * The app cannot turn this on. Only the system can, from its own VPN settings, or
- * a device owner through device policy. So this reports state and hands the reader
- * to the place that owns the switch, rather than showing a control that would have
- * to fail when tapped.
- *
- * The state is read from the running service, which is why "not read yet" is a
- * state of its own rather than being shown as "off".
- *
- * @param onOpenVpnSettings null on a system image that ships no Activity for the
- *   VPN settings screen. The card then explains the state and stops there, which is
- *   the same rule again: a control that cannot work is not shown.
- */
+/** Reports Android-owned always-on state; unavailable settings produce no dead control. */
 @Composable
 fun AlwaysOnCard(
     alwaysOn: AlwaysOn,

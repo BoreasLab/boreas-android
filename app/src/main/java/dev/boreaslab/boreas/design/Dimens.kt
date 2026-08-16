@@ -5,13 +5,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
-/**
- * The 4dp spacing scale from the supplied design document.
- *
- * The document's 96px section rhythm is a desktop marketing value. This is a
- * handheld product surface, so band separation uses [xxl]; the document's own
- * responsive section collapses the same rhythm on narrow viewports.
- */
+/** 4dp spacing scale; handheld section separation uses [xxl]. */
 object Space {
     val xxs = 4.dp
     val xs = 8.dp
@@ -22,7 +16,6 @@ object Space {
     val xxl = 48.dp
 }
 
-/** The document's hierarchical radius scale, unchanged. */
 object Radius {
     val xs = RoundedCornerShape(4.dp)
     val sm = RoundedCornerShape(6.dp)
@@ -32,14 +25,7 @@ object Radius {
     val pill = RoundedCornerShape(percent = 50)
 }
 
-/**
- * One curve family, decelerating into rest.
- *
- * MOTION is set to 3: motion here explains a state change and does nothing else.
- * Exits run faster than entrances because the user has already decided.
- * [Motion.reduced] replaces movement with an instant change and is selected at the
- * point of use, so a mid-session preference change takes effect.
- */
+/** State motion; reduced mode uses zero-duration transitions. */
 object Motion {
     val standard = CubicBezierEasing(0.2f, 0f, 0f, 1f)
 
@@ -53,7 +39,6 @@ object Motion {
     fun <T> state(reduced: Boolean) = tween<T>(if (reduced) 0 else STATE_MS, easing = standard)
 }
 
-/** Hit areas. The floor is 24dp; this surface holds every target at 48dp or more. */
 object Target {
     val minimum = 48.dp
     val row = 56.dp
@@ -64,20 +49,13 @@ object Stroke {
     val hairline = 1.dp
     val border = 1.dp
 
-    /** A border carrying focus or an error, thick enough to read as a change of state. */
     val borderStrong = 2.dp
     val focus = 2.dp
     val focusGap = 2.dp
     val indicator = 2.dp
 }
 
-/**
- * Icon sizes.
- *
- * Three steps, not five. The 18 and 22 values this replaced were a step apart from
- * their neighbours, which is a difference nobody perceives and everybody has to
- * maintain. [sm] sits inside a button, [md] leads a row, [lg] heads an empty state.
- */
+/** Three shared icon sizes for controls, rows, and empty states. */
 object IconSize {
     val sm = 16.dp
     val md = 20.dp

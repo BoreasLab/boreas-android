@@ -37,17 +37,6 @@ import dev.boreaslab.boreas.design.Space
 import dev.boreaslab.boreas.design.Stroke
 import dev.boreaslab.boreas.design.Target
 
-/**
- * The row.
- *
- * Every list on this surface is built from this one component, so hit area, text
- * alignment, pressed feedback, and focus behave identically whether the row opens
- * a screen, toggles a setting, or picks one of a closed set. The three wrappers
- * below compose it rather than reimplement it.
- *
- * @param trailing content on the right. Passed in rather than switched on a flag,
- *   so a new kind of row needs no new parameter here.
- */
 @Composable
 fun ListRow(
     title: String,
@@ -104,7 +93,6 @@ fun ListRow(
     }
 }
 
-/** A row that opens another screen. The chevron is decorative; the row carries the label. */
 @Composable
 fun NavigationRow(
     title: String,
@@ -129,13 +117,7 @@ fun NavigationRow(
     }
 }
 
-/**
- * A row that toggles one setting.
- *
- * The whole row is the target, and the switch is cleared from the semantics tree so
- * assistive technology is offered one control rather than two that do the same
- * thing.
- */
+/** Whole row is one accessible toggle; nested switch is removed from semantics. */
 @Composable
 fun SwitchRow(
     title: String,
@@ -170,12 +152,7 @@ fun SwitchRow(
     }
 }
 
-/**
- * One option of a closed set.
- *
- * Selection is announced through the selectable role, and shown with a control and
- * a position rather than with color alone.
- */
+/** Selectable row with semantic role and non-color selection indicator. */
 @Composable
 fun ChoiceRow(
     title: String,

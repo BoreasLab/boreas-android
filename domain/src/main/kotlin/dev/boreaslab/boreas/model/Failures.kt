@@ -1,40 +1,19 @@
 package dev.boreaslab.boreas.model
 
-/**
- * The operations a failure can be attached to.
- *
- * The service state carries the operation separately from the reason, because
- * "bypass denied while starting" and "bypass denied while following a network
- * change" need different copy and offer different next steps.
- */
 public enum class Operation { Start, Stop, Reconfigure, NetworkChange }
 
-/**
- * Every failure this surface can show.
- *
- * A closed set: the screens eliminate it exhaustively, so adding a reason fails
- * the build at every site that must present it rather than rendering a blank
- * region. Nothing here is a raw fault code. Each maps to copy that states what
- * happened, what it means, and the next action.
- */
+/** Closed, typed failures mapped to user-facing recovery copy. */
 public sealed interface TypedFailure {
 
-    /**
-     * The shared engine is not part of this build.
-     *
-     * This is the honest terminal state for the Kotlin-only shell: the control
-     * surface can reach every state up to the point where packets would be handed
-     * over, and stops there.
-     */
+    /** Shared engine is absent from this Kotlin-only shell. */
     public data object EngineUnavailable : TypedFailure
 
-    /** The consent dialog was shown and the user declined. Recoverable. */
     public data object ConsentDenied : TypedFailure
 
-    /** VpnService.prepare returned no intent and no permission. Not recoverable here. */
+    /** VpnService.prepare could not provide consent. */
     public data object ConsentUnavailable : TypedFailure
 
-    /** VpnService.protect refused a socket. The engine fails closed rather than loop. */
+    /** VpnService.protect refused a socket; engine fails closed rather than loop. */
     public data object BypassDenied : TypedFailure
 
     /** Android rejected the interface configuration built from PlatformConfig. */

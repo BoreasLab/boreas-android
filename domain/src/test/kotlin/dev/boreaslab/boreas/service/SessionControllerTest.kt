@@ -26,16 +26,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * The A1 gate: "unit tests cover every lifecycle variant, command coalescing,
- * cancellation, and all failure-to-UI transitions."
- *
- * No Android type appears here. The controller is a pure state machine over two
- * interfaces, which is the whole reason it was written as one.
- */
+/** Covers lifecycle variants, command coalescing, cancellation, and failure transitions. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionControllerTest {
-
     private val platform = PlatformConfig(
         address = (Ipv4Address.parse("10.24.0.2") as Parsed.Valid).value,
         mtu = (Mtu.parse("1500") as Parsed.Valid).value,
@@ -44,8 +37,6 @@ class SessionControllerTest {
     )
 
     private fun start() = SessionCommand.Start(EngineConfig(), platform)
-
-    // Test doubles.
 
     private class FakeEngine(
         override val isAvailable: Boolean = true,
@@ -94,8 +85,6 @@ class SessionControllerTest {
 
         fun release(outcome: ConsentOutcome) = release.complete(outcome)
     }
-
-    // Every lifecycle variant.
 
     @Test
     fun `starts from stopped and reaches running`() = runTest {
@@ -188,8 +177,6 @@ class SessionControllerTest {
         assertEquals(0, engine.stopCount)
         controller.shutdown()
     }
-
-    // Every failure-to-UI transition.
 
     @Test
     fun `an unlinked engine fails before consent is requested`() = runTest {

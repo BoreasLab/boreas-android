@@ -48,13 +48,7 @@ import dev.boreaslab.boreas.ui.settings.TunnelScreen
 import dev.boreaslab.boreas.ui.shield.ShieldScreen
 import kotlinx.coroutines.launch
 
-/**
- * The application shell.
- *
- * The only place that knows about navigation and about the consent Activity result.
- * Every screen below takes values and callbacks, which is what lets each one be
- * previewed without a navigation graph or a running service.
- */
+/** Navigation shell and consent bridge; screens receive values and callbacks. */
 @Composable
 fun BoreasApp(viewModel: BoreasViewModel, modifier: Modifier = Modifier) {
     val navController = rememberNavController()
@@ -78,8 +72,7 @@ fun BoreasApp(viewModel: BoreasViewModel, modifier: Modifier = Modifier) {
                 current = route,
                 onSelect = { destination ->
                     navController.navigate(destination.route) {
-                        // One entry per peer destination, and the reader's place
-                        // inside each is restored when they come back to it.
+                        // Preserve one back-stack entry and saved state per peer destination.
                         popUpTo(TopLevel.Shield.route) { saveState = true }
                         launchSingleTop = true
                         restoreState = true
@@ -90,12 +83,7 @@ fun BoreasApp(viewModel: BoreasViewModel, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * Carries the service's consent request to the Activity result API and back.
- *
- * The service has no window, so the request cannot be launched from there. This is
- * the one bridge between them, and it exists only while a screen is composed.
- */
+/** Bridges service consent to the Activity result API while composed. */
 @Composable
 private fun ConsentBridge(viewModel: BoreasViewModel) {
     val launcher = rememberLauncherForActivityResult(
@@ -115,19 +103,7 @@ private fun ConsentBridge(viewModel: BoreasViewModel) {
     }
 }
 
-/**
- * Starting the tunnel, with the notification permission asked for first.
- *
- * Android requires a VPN to run as a foreground service, and a foreground service
- * announces itself with a notification. From API 33 that notification is suppressed
- * unless the reader has granted POST_NOTIFICATIONS, so without this the tunnel would
- * run with no visible sign of it, which is the one thing a privacy tool must never
- * do. The request is made at the moment it becomes relevant rather than on launch,
- * so the reader is asked in the context that explains the answer.
- *
- * The tunnel starts either way. A declined notification is worth reporting, but it
- * is not a reason to refuse the thing the reader actually asked for.
- */
+/** Requests API 33+ notification permission before starting; denial does not block VPN start. */
 @Composable
 private fun rememberStartTunnel(viewModel: BoreasViewModel): () -> Unit {
     val context = LocalContext.current
@@ -144,22 +120,13 @@ private fun rememberStartTunnel(viewModel: BoreasViewModel): () -> Unit {
     }
 }
 
-/** Below API 33 the permission is granted at install time, so there is nothing to ask. */
+/** API <33 grants notification permission at install; API 33+ requires a runtime check. */
 private fun Context.canPostNotifications(): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
         PackageManager.PERMISSION_GRANTED
 
-/**
- * Opening the system VPN settings, or null when no Activity handles that.
- *
- * Android owns the always-on switch, so the app can only hand the reader over. A
- * system image that ships no Activity for ACTION_VPN_SETTINGS is rare but real, and
- * on one the intent cannot be honored. Returning null rather than catching the
- * failure at the moment of the tap lets each caller leave the control out entirely,
- * which is the same rule the always-on card already follows: do not show a control
- * that would have to fail when used.
- */
+/** Returns a launcher only when the system provides a VPN settings Activity. */
 @Composable
 private fun rememberOpenVpnSettings(): (() -> Unit)? {
     val context = LocalContext.current
@@ -188,8 +155,7 @@ private fun BoreasNavGraph(
     val startTunnel = rememberStartTunnel(viewModel)
     val openVpnSettings = rememberOpenVpnSettings()
 
-    // Writing to the clipboard suspends, so it runs in a scope tied to this
-    // composition and is cancelled with it rather than outliving the screen.
+    // Clipboard writes are cancelled with this composition rather than outliving it.
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val clipLabel = stringResource(R.string.diagnostics_clip_label)

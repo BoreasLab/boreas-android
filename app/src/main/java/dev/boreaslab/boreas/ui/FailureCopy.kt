@@ -5,13 +5,7 @@ import dev.boreaslab.boreas.R
 import dev.boreaslab.boreas.model.Operation
 import dev.boreaslab.boreas.model.TypedFailure
 
-/**
- * Copy for every typed failure.
- *
- * One place, eliminating the closed set exhaustively, so a new failure reason
- * cannot reach a screen without someone writing words for it. Each pair states
- * what happened and what it means; the screen adds the action.
- */
+/** User-facing copy for every typed failure. */
 data class FailureCopy(
     @param:StringRes val title: Int,
     @param:StringRes val detail: Int,

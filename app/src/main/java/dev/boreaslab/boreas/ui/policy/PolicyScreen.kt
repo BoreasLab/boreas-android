@@ -27,16 +27,7 @@ import dev.boreaslab.boreas.service.VpnLifecycleState
 import dev.boreaslab.boreas.ui.PreviewSurface
 import dev.boreaslab.boreas.ui.SettingsGroup
 
-/**
- * What the engine should do with what it sees.
- *
- * The engine owns every decision here; this screen only chooses the values it will
- * be handed. Nothing on this screen filters anything itself.
- *
- * Choices save the moment they are made, so there is no submit button to lose work
- * against. What a running session cannot pick up without restarting is stated at
- * the top, next to the one action that applies it.
- */
+/** Selects engine policy; running sessions apply changes only after restart. */
 @Composable
 fun PolicyScreen(
     config: EngineConfig,
@@ -95,8 +86,7 @@ fun PolicyScreen(
                     onCheckedChange = onInspectTls,
                 )
             }
-            // The control stays visible and its blocker is named next to it, rather
-            // than the row vanishing or going quiet with no reason given.
+            // Keep disabled control visible with its blocker beside it.
             if (!certificateInstalled) {
                 NoticeCard(
                     tone = NoticeTone.Info,
