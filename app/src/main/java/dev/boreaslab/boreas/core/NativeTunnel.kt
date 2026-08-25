@@ -55,6 +55,17 @@ internal class NativeTunnel private constructor(
 
     private val stopped = AtomicBoolean(false)
 
+    /**
+     * The reader did not return within the join, so the handle was never freed.
+     *
+     * Recorded rather than retried: a second attempt would face the same borrow,
+     * and the diagnostics screen is where a leak that only a long-running process
+     * would notice can be seen.
+     */
+    @Volatile
+    var abandoned: Boolean = false
+        private set
+
     private val reader = Thread({ readEvents() }, "boreas-events").apply {
         isDaemon = true
         start()
@@ -159,6 +170,17 @@ internal class NativeTunnel private constructor(
 
         // 2. Ours to join. Until it returns, it holds a borrow of the handle.
         reader.join(READER_JOIN_MS)
+
+        // A bounded join that went on to free anyway would be the exact
+        // use-after-free the two-call teardown exists to prevent: the reader is
+        // *inside* next_event, and no locking reaches a thread that is already
+        // in the call. Leaking one handle and one descriptor for the life of the
+        // process is the safer of the two mistakes, and shutdown has already
+        // closed every socket and returned every pooled buffer.
+        if (reader.isAlive) {
+            abandoned = true
+            return
+        }
 
         // 3. Only now is the handle unreferenced.
         library.boreas_tunnel_free(handle)
