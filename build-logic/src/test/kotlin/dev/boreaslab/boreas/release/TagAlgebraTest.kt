@@ -89,6 +89,10 @@ class TagAlgebraTest {
         assertTrue("$morning should sort below $midday", morning < midday)
         assertTrue(morning, morning.contains("09-30-00"))
         assertTrue(midday, midday.contains("11-30-00"))
+
+        // The same law at its source. A Stamp's ordering *is* the ordering of
+        // its rendering, which is only chronological because every field pads.
+        assertTrue(Stamp.at(noon.minusSeconds(2 * 3600)) < Stamp.at(noon))
     }
 
     /** The same law across a date boundary, where the day and month also pad. */
