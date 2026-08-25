@@ -164,6 +164,7 @@
     <!-- About. -->
     <string name="about_title">About</string>
     <string name="about_version">Version</string>
+    <string name="about_built_from">Built from</string>
     <string name="about_engine">Packet engine</string>
     <string name="about_role">Boreas keeps Android concerns in Kotlin and packet handling in a shared engine. This build contains the Kotlin half.</string>
     <string name="about_typefaces">Typefaces</string>

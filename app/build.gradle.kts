@@ -180,6 +180,54 @@ val fetchBoreasCore = tasks.register<FetchBoreasCore>("fetchBoreasCore") {
  */
 val boreasJniLibs: File = boreasCoreDirectory.get().asFile.resolve("jniLibs").apply { mkdirs() }
 
+/*
+ * The name and the number, taken rather than derived.
+ *
+ * `resolve` decides both once, in the release workflow, and passes them down. The
+ * tag it produces carries a timestamp, so a second job that recomputed the
+ * identity would agree with the first only by luck.
+ *
+ * The fallbacks are for a build with no tag and no pipeline: a developer's
+ * machine, and CI's own artifact build. `version` is the literal 0.0.0 committed
+ * in gradle.properties, which is visibly a placeholder rather than a claim, and
+ * `1` is the lowest versionCode Android accepts. Neither is ever published:
+ * publishing goes through the workflow, which always injects.
+ */
+val injectedVersionName: String = providers.gradleProperty("boreas.versionName")
+    .getOrElse(version.toString())
+
+val injectedVersionCode: Int = providers.gradleProperty("boreas.versionCode").orNull
+    ?.let { declared ->
+        declared.toIntOrNull()
+            ?: throw GradleException("-Pboreas.versionCode=$declared is not an integer")
+    }
+    ?: 1
+
+val injectedProvenance: String = providers.gradleProperty("boreas.provenance")
+    .getOrElse("local build")
+
+/**
+ * The release signing key, when the environment carries one.
+ *
+ * Absence is a state rather than a failure: this repository can be built by
+ * somebody who has no key and wants an artefact to inspect, and CI's own
+ * per-push build is exactly that. What must not happen is a half-configured
+ * signing config, so the three secrets beside the keystore are demanded the
+ * moment the keystore appears rather than defaulted to empty and discovered by
+ * `apksigner`.
+ *
+ * The release workflow names its assets `-unsigned` when this is absent, so a
+ * tester learns before `adb install` does.
+ */
+val signingKeystore: String? = providers.environmentVariable("BOREAS_KEYSTORE")
+    .orNull
+    ?.takeIf(String::isNotEmpty)
+
+fun signingSecret(name: String): String = providers.environmentVariable(name).orNull
+    ?: throw GradleException(
+        "BOREAS_KEYSTORE is set, so $name must be too. Signing is all four values or none.",
+    )
+
 android {
     namespace = "dev.boreaslab.boreas"
     // Compose 1.12 requires compiling against 37. targetSdk stays at 36 on purpose:
@@ -201,8 +249,8 @@ android {
         // minSdk >= 23, and the shipped binaries are built against API 26.
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0-a1"
+        versionCode = injectedVersionCode
+        versionName = injectedVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
@@ -213,6 +261,22 @@ android {
         // Read at load and compared with boreas_abi_version(). See BoreasLibrary.
         buildConfigField("int", "BOREAS_ABI_VERSION", pinned("abiVersion"))
         buildConfigField("String", "BOREAS_CORE_TAG", "\"${pinned("tag")}\"")
+
+        // What a 30-bit integer cannot say. A bug report has to map to one
+        // (app version, core version) pair or it maps to nothing, and the pair is
+        // only legible if the app half names the release it is an offset from.
+        buildConfigField("String", "BOREAS_APP_PROVENANCE", "\"$injectedProvenance\"")
+    }
+
+    signingConfigs {
+        if (signingKeystore != null) {
+            create("release") {
+                storeFile = file(signingKeystore)
+                storePassword = signingSecret("BOREAS_KEYSTORE_PASSWORD")
+                keyAlias = signingSecret("BOREAS_KEY_ALIAS")
+                keyPassword = signingSecret("BOREAS_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -221,6 +285,9 @@ android {
             buildConfigField("boolean", "SIMULATION_AVAILABLE", "true")
         }
         release {
+            // Null when no key was supplied, which leaves the artefact unsigned
+            // rather than failing. See signingKeystore.
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

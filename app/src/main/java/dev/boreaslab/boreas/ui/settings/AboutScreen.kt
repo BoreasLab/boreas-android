@@ -20,7 +20,15 @@ import dev.boreaslab.boreas.design.component.MetricRow
 import dev.boreaslab.boreas.design.component.RowDivider
 import dev.boreaslab.boreas.ui.PreviewSurface
 
-/** Version, what this build contains, and the licenses it ships under. */
+/**
+ * Version, what this build contains, and the licenses it ships under.
+ *
+ * The three rows are one composition record. An artefact from this repository is
+ * an app half and a core half pinned together, and a bug report maps to that pair
+ * or it maps to nothing: the version alone cannot say which core it carries, and
+ * the version of a pre-release cannot say which release it is an offset from. The
+ * same three values head the release notes.
+ */
 @Composable
 fun AboutScreen(modifier: Modifier = Modifier) {
     Column(
@@ -37,6 +45,11 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             MetricRow(
                 label = stringResource(R.string.about_version),
                 value = BuildConfig.VERSION_NAME,
+            )
+            RowDivider()
+            MetricRow(
+                label = stringResource(R.string.about_built_from),
+                value = BuildConfig.BOREAS_APP_PROVENANCE,
             )
             RowDivider()
             MetricRow(
