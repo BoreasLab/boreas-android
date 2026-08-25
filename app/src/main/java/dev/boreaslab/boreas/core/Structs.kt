@@ -4,37 +4,18 @@ import com.sun.jna.Callback
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
 
-/*
- * The five structs that cross the boundary, at the widths api/abi.md names.
- *
- * Field *order* is the contract; the names are ours, so they read as Kotlin. Every
- * class carries @FieldOrder rather than relying on the order the JVM happens to
- * report its fields in, which it does not promise. R8 is told to keep both the
- * fields and the annotation, because a renamed field is a struct whose members
- * land at the wrong offsets and there is no diagnostic for that.
- *
- * `bool` is one byte, so every one of them is a `Byte` compared against zero. This
- * is the trap the header calls out; Kotlin has no automatic marshalling to get it
- * wrong, but it also has no automatic marshalling to get it right.
+/* These five structs follow the widths and field order in api/abi.md. @FieldOrder
+ * is explicit because the JVM does not promise declaration order, and R8 must
+ * retain the fields and annotation or offsets can change without a diagnostic.
+ * C `bool` is one byte, represented here by `Byte` and explicit zero comparisons.
  */
 
-/**
- * A struct at this boundary, with its layout readable.
- *
- * The header pins every offset with a static assertion, which protects a host
- * that compiles it. This app does not: JNA computes the layout at run time from
- * the declarations below, and nothing would check them until a device read a
- * field from the middle of another one. `fieldOffset` is protected in JNA, so
- * exposing it here is what lets `BoreasLayoutTest` assert the same numbers on a
- * plain JVM.
- *
- * It declares no fields of its own, so it does not appear in any layout.
- */
+/** Exposes JNA's protected offset lookup for [BoreasLayoutTest]. */
 internal abstract class BoreasStruct : Structure() {
     fun offsetOf(field: String): Int = fieldOffset(field)
 }
 
-/** `BoreasDevice`: the TUN this app supplies. Every callback runs on a core thread. */
+/** `BoreasDevice`: the TUN supplied by this app. Callbacks run on core threads. */
 @Structure.FieldOrder("context", "recv", "send", "close", "release", "mtu")
 internal class BoreasDevice : BoreasStruct() {
 
@@ -48,20 +29,20 @@ internal class BoreasDevice : BoreasStruct() {
 
     @JvmField var release: Release? = null
 
-    /** Must be at least 1280, the IPv6 floor, and equal to `BoreasConfig.mtu`. */
+    /** At least 1280, the IPv6 floor, and equal to `BoreasConfig.mtu`. */
     @JvmField var mtu: Short = 0
 
-    /** Reads one IP packet. Returns the count, `0` for "ask again", or a negative errno. */
+    /** Reads one IP packet: count, `0` for "ask again", or negative errno. */
     fun interface Recv : Callback {
         fun invoke(context: Pointer?, buffer: Pointer, capacity: SizeT): SSizeT
     }
 
-    /** Writes one IP packet, whole. Returns `0` or a negative errno; a short write is an error. */
+    /** Writes one whole IP packet: `0` or negative errno; short writes are errors. */
     fun interface Send : Callback {
         fun invoke(context: Pointer?, buffer: Pointer, length: SizeT): SSizeT
     }
 
-    /** Makes an in-flight [Recv] return. May run *while* one is blocked. */
+    /** Makes an in-flight [Recv] return and may run while it is blocked. */
     fun interface Close : Callback {
         fun invoke(context: Pointer?)
     }
@@ -72,13 +53,7 @@ internal class BoreasDevice : BoreasStruct() {
     }
 }
 
-/**
- * `BoreasBypass`: sockets that do not re-enter the tunnel.
- *
- * The obligation that is silent when it is skipped. An unprotected socket works
- * perfectly until the tunnel comes up, at which point every packet it sends
- * re-enters the tunnel it was serving.
- */
+/** `BoreasBypass`: protects sockets from re-entering the tunnel. */
 @Structure.FieldOrder("context", "protect", "release")
 internal class BoreasBypass : BoreasStruct() {
 
@@ -88,9 +63,9 @@ internal class BoreasBypass : BoreasStruct() {
 
     @JvmField var release: Release? = null
 
-    /** Excludes one socket. Returns `0` on success, negative on refusal. */
+    /** Excludes one socket: `0` on success, negative on refusal. */
     fun interface Protect : Callback {
-        /** `BoreasSocket` is `int64_t`: one type has to hold a Unix fd and a Windows handle. */
+        /** `BoreasSocket` is `int64_t` so it can hold a Unix fd or Windows handle. */
         fun invoke(context: Pointer?, socket: Long): Int
     }
 
@@ -99,7 +74,7 @@ internal class BoreasBypass : BoreasStruct() {
     }
 }
 
-/** `BoreasWireGuard`. Present because the struct is, not because anything fills it in. */
+/** `BoreasWireGuard`, present in the ABI but not populated by this app. */
 @Structure.FieldOrder("endpoint", "privateKey", "peerPublicKey", "presharedKey", "hasPresharedKey")
 internal class BoreasWireGuard : BoreasStruct() {
 
@@ -111,7 +86,7 @@ internal class BoreasWireGuard : BoreasStruct() {
 
     @JvmField var presharedKey: ByteArray = ByteArray(KEY_BYTES)
 
-    /** A separate flag because thirty-two zero bytes is a key someone may have configured. */
+    /** Separate flag because thirty-two zero bytes can be a configured key. */
     @JvmField var hasPresharedKey: Byte = 0
 
     internal companion object {
@@ -119,7 +94,7 @@ internal class BoreasWireGuard : BoreasStruct() {
     }
 }
 
-/** `BoreasCeilings`. Zero in any field means "use the default for it", so all-zero is valid. */
+/** `BoreasCeilings`. Zero selects the core default; all-zero is valid. */
 @Structure.FieldOrder(
     "bufferSlices",
     "datagramsPerFlow",
@@ -137,7 +112,7 @@ internal class BoreasCeilings : BoreasStruct() {
     @JvmField var pendingReassemblies: SizeT = SizeT.ZERO
 }
 
-/** `BoreasConfig`. Every pointer in it is borrowed for the duration of the start call. */
+/** `BoreasConfig`. Every pointer is borrowed for the start call. */
 @Structure.FieldOrder(
     "egress",
     "wireguard",
@@ -160,7 +135,7 @@ internal class BoreasConfig : BoreasStruct() {
     /** `BOREAS_EGRESS_DIRECT` (0) or `BOREAS_EGRESS_WIREGUARD` (1). */
     @JvmField var egress: Int = EGRESS_DIRECT
 
-    /** Read only when [egress] is WireGuard, but present in the layout either way. */
+    /** Read only when [egress] is WireGuard; present in the layout either way. */
     @JvmField var wireguard: BoreasWireGuard = BoreasWireGuard()
 
     /** Read only when [egress] is direct. */
@@ -172,7 +147,7 @@ internal class BoreasConfig : BoreasStruct() {
     @JvmField var lists: Pointer? = null
     @JvmField var listCount: SizeT = SizeT.ZERO
 
-    /** An allowlist, never a pattern. Zero means no interception and needs no authority. */
+    /** Allowlist, never a pattern. Zero means no interception and no authority. */
     @JvmField var interceptHosts: Pointer? = null
     @JvmField var interceptHostCount: SizeT = SizeT.ZERO
 
@@ -183,7 +158,7 @@ internal class BoreasConfig : BoreasStruct() {
 
     @JvmField var rewriteDocuments: Byte = 0
 
-    /** The same number the interface was built with. See api/obligations.md. */
+    /** Must equal the interface MTU. See api/obligations.md. */
     @JvmField var mtu: Short = 0
 
     @JvmField var ceilings: BoreasCeilings = BoreasCeilings()
@@ -193,7 +168,7 @@ internal class BoreasConfig : BoreasStruct() {
     }
 }
 
-/** `BoreasCounters`. Every field is something that went wrong or was refused. */
+/** `BoreasCounters`. Fields report drops, refusals, and other failures. */
 @Structure.FieldOrder(
     "datagramsDropped",
     "packetsRejected",
@@ -212,12 +187,9 @@ internal class BoreasCounters : BoreasStruct() {
 }
 
 /**
- * `BoreasEvent`. A tag and every arm's fields side by side rather than a union.
- *
- * Only the fields `kind` names carry meaning; the rest are zero. `blocked` sits at
- * offset four, which is the field the header's static assertions exist to protect:
- * under `-fshort-enums` the tag would be one byte and everything after it would
- * shift while both sides still compiled.
+ * `BoreasEvent` stores every arm's fields beside its tag rather than in a union.
+ * Only fields named by `kind` carry meaning. `blocked` must remain at offset four;
+ * `-fshort-enums` would shrink the tag and shift the remaining fields.
  */
 @Structure.FieldOrder(
     "kind",
@@ -233,7 +205,7 @@ internal class BoreasEvent : BoreasStruct() {
     @JvmField var kind: Int = 0
     @JvmField var blocked: Byte = 0
 
-    /** The *full* length before truncation; larger than the capacity means it did not fit. */
+    /** Full length before truncation; larger than capacity means it did not fit. */
     @JvmField var nameLength: SizeT = SizeT.ZERO
     @JvmField var ruleLength: SizeT = SizeT.ZERO
 

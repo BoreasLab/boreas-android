@@ -30,31 +30,15 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Owns Android VPN consent, interface creation, foreground-service compliance,
- * routes, and lifecycle effects.
+ * routes, and lifecycle effects. Packet policy stays native; this service creates
+ * and closes the descriptor after the core's `release` callback.
  *
- * It is also the platform seam the engine reaches back through, and both halves of
- * that are here for the same reason: `VpnService.Builder` appears in exactly one
- * place in this program, and `protect` is a method on this object.
- *
- * Packet policy stays native. The descriptor is created here, handed to the device
- * vtable once, and closed here after the core's `release` callback has run.
- *
- * `internal` because [VpnPlatform] is: the seam is an implementation detail of this
- * module, and widening it to publish a service nothing outside the module names
- * would be the wrong half of that pair to move. Kotlin's `internal` is public in
- * the class file, so the manifest still resolves it.
+ * `internal` is sufficient because the manifest resolves the class from its JVM
+ * name even though [VpnPlatform] is module-local.
  */
 internal class BoreasVpnService : VpnService(), VpnPlatform {
 
-    /**
-     * Deliberately not the main dispatcher.
-     *
-     * Nothing this service does needs it: state reaches the UI through flows, and
-     * `startForeground`, the notification manager, and `VpnService.Builder` are all
-     * callable from any thread. Keeping the loop off the main thread is what lets
-     * [onDestroy] wait a bounded moment for the native teardown without the wait
-     * and the work it is waiting for needing the same thread.
-     */
+    /** Default dispatcher keeps bounded native teardown off the main thread. */
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private lateinit var settings: SettingsRepository
@@ -72,7 +56,7 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
         mirrorStateToBus()
     }
 
-    /** The linked engine, unless this debug build was explicitly asked to simulate. */
+    /** Selects the simulator only when this debug build explicitly enables it. */
     private suspend fun selectEngine(): EngineHost {
         if (BuildConfig.SIMULATION_AVAILABLE && settings.simulationEnabled.first()) {
             return SimulatedEngineHost()
@@ -87,16 +71,9 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
     // ---------------------------------------------------------------- platform
 
     /**
-     * Builds the interface, once, from one trusted configuration value.
-     *
-     * `setMtu` is called with the same number that reaches `BoreasConfig.mtu`,
-     * because both read [PlatformConfig.mtu]. api/obligations.md names disagreement
-     * here as one of the two silent mistakes: the tunnel works and spends its life
-     * answering Packet Too Big to senders that never converge, and `paths_reported`
-     * is the only symptom.
-     *
-     * `establish()` returning null is a documented path, not a theoretical one, so
-     * it is a variant rather than an exception.
+     * Builds the interface from [PlatformConfig]. `setMtu` and
+     * `BoreasConfig.mtu` must agree; see api/obligations.md. A null result from
+     * `establish()` is a refusal, not an exception.
      */
     override fun establish(config: PlatformConfig): Establishment = try {
         val builder = Builder()
@@ -104,28 +81,22 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
             .setMtu(config.mtu.bytes)
             .addAddress(config.address.text, HOST_PREFIX)
             .addRoute(IPV4_ANY, 0)
-            // IPv6 is routed in even though this app configures no IPv6 address of
-            // its own. Leaving it out is the fail-open choice: on a dual-stack
-            // network every IPv6 flow would leave beside the tunnel, unfiltered,
-            // while the interface reported itself up. Routing it in is fail-closed.
+            // Route IPv6 even without a local IPv6 address: omitting it would let
+            // dual-stack traffic bypass the tunnel.
             // See docs/verified-inputs.md; this needs a dual-stack device to confirm.
             .addRoute(IPV6_ANY, 0)
-            // Non-blocking, which is also the platform default. The device vtable
-            // polls with a bounded timeout and reads only when the poll says there
-            // is something, which is what lets `recv` answer "ask again" instead of
-            // parking inside a core callback.
+            // The device vtable polls with a bounded timeout and reads only when
+            // data is available, so `recv` can answer "ask again".
             .setBlocking(false)
-            // The tunnel is not itself a data plan, so it does not claim to be one.
+            // This tunnel is not a metered data connection.
             .setMetered(false)
 
         config.dnsServers.forEach { builder.addDnsServer(it.text) }
         config.excludedPackages.forEach { name ->
-            // An excluded app that has since been uninstalled must not cost the user
-            // their tunnel. The exclusion is simply no longer meaningful.
+            // An uninstalled package no longer has a meaningful exclusion.
             try {
                 builder.addDisallowedApplication(name)
             } catch (_: PackageManager.NameNotFoundException) {
-                // Nothing to do: the exclusion is simply no longer meaningful.
             }
         }
 
@@ -136,12 +107,11 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
         Establishment.Rejected(error)
     }
 
-    /** A bypass over this service. The core releases it exactly once, however start ends. */
     override fun bypass(): VpnBypass = VpnBypass(this)
 
     // --------------------------------------------------------------- lifecycle
 
-    /** Distinguishes explicit commands from Android always-on and sticky-restart intents. */
+    /** Distinguishes explicit commands from always-on and sticky-restart intents. */
     private sealed interface ServiceRequest {
         data object Start : ServiceRequest
         data object Reconfigure : ServiceRequest
@@ -153,7 +123,7 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
         ACTION_START -> ServiceRequest.Start
         ACTION_RECONFIGURE -> ServiceRequest.Reconfigure
         ACTION_STOP -> ServiceRequest.Stop
-        // Null action means Android start or sticky restart; honor it only when always-on.
+        // Null action is an Android start or sticky restart; honor it only for always-on.
         null -> if (isAlwaysOn) ServiceRequest.Start else ServiceRequest.Ignore
         else -> ServiceRequest.Ignore
     }
@@ -168,7 +138,7 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
             ServiceRequest.Ignore -> Unit
         }
 
-        // Always-on services restart after process death; ordinary starts must not reappear.
+        // Always-on services restart after process death; ordinary starts must not.
         return if (isAlwaysOn) START_STICKY else START_NOT_STICKY
     }
 
@@ -215,7 +185,6 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
         controller.submit(command)
     }
 
-    /** Publishes lifecycle transitions and counter updates without logging every tick. */
     private fun mirrorStateToBus() {
         scope.launch {
             var previous: VpnLifecycleState? = null
@@ -240,7 +209,7 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
         }
     }
 
-    /** Applies the state-carried notification decision without re-deriving eligibility. */
+    /** Applies the notification decision carried by state. */
     private fun applyForeground(state: VpnLifecycleState) {
         val notifications = getSystemService(NotificationManager::class.java)
         when (val intent = SessionNotifications.forState(this, state)) {
@@ -252,28 +221,23 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
 
             ForegroundIntent.Dismiss -> {
                 stopForeground(STOP_FOREGROUND_REMOVE)
-                // stopForeground cannot remove notify()'d notifications; cancel both paths.
+                // stopForeground cannot remove notifications posted with notify().
                 notifications.cancel(SessionNotifications.NOTIFICATION_ID)
-                // Always-on owns service lifetime; ordinary sessions may stop themselves.
+                // Always-on owns the service lifetime.
                 if (!isAlwaysOn) stopSelf()
             }
         }
     }
 
-    /** VPN slot was revoked; report a stop because the service did not fail. */
+    /** VPN slot revocation is an ordinary stop, not a service failure. */
     override fun onRevoke() {
         controller.submit(SessionCommand.Stop)
         super.onRevoke()
     }
 
     /**
-     * Tears the session down before letting the scope go.
-     *
-     * Bounded and best effort. The handle is native and the reader is a real
-     * thread, so neither ends because a coroutine scope was cancelled; freeing
-     * them is worth a moment on the way out. The bound is what keeps a core that
-     * will not stop from turning a service teardown into an ANR, and the process
-     * is usually going with us anyway.
+     * Tears the session down before cancelling the scope. The timeout prevents a
+     * non-terminating native shutdown from turning service teardown into an ANR.
      */
     override fun onDestroy() {
         runBlocking { withTimeoutOrNull(TEARDOWN_TIMEOUT_MS) { controller.shutdown() } }
@@ -287,12 +251,12 @@ internal class BoreasVpnService : VpnService(), VpnPlatform {
         const val ACTION_STOP = BuildConfig.APPLICATION_ID + ".STOP"
         const val ACTION_RECONFIGURE = BuildConfig.APPLICATION_ID + ".RECONFIGURE"
 
-        /** The tunnel address names one host, so the interface carries one address. */
+        /** One host address on the tunnel interface. */
         private const val HOST_PREFIX = 32
         private const val IPV4_ANY = "0.0.0.0"
         private const val IPV6_ANY = "::"
 
-        /** Long enough for an ordered shutdown, short enough not to be an ANR. */
+        /** Bounds service teardown before Android can report an ANR. */
         private const val TEARDOWN_TIMEOUT_MS = 3_000L
     }
 }
