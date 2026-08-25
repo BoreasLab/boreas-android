@@ -100,15 +100,27 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
+            ~/.gradle/boreas-core
           key: >-
             gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties',
-            'gradle/libs.versions.toml', '**/*.gradle.kts') }}
+            'gradle/libs.versions.toml', 'gradle/boreas-core.properties', '**/*.gradle.kts') }}
           restore-keys: |
             gradle-${{ runner.os }}-
 
       - name: Install the Android SDK packages this build compiles against
         shell: bash
         run: ./.github/scripts/android-sdk.sh 'platforms;android-37.0' 'build-tools;37.0.0'
+
+      # The core is a binary fetched on every build, which is a supply-chain edge
+      # the digest alone does not close: a checksum only proves the file matches a
+      # list that came from the same place the file did. This proves which
+      # workflow built it, from which commit, before anything unpacks it. It fills
+      # the same cache the Gradle task reads, so the build does not fetch again.
+      - name: Verify the pinned Boreas core
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./.github/scripts/boreas-core.sh
 
       - name: Test
         shell: bash

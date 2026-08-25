@@ -10,9 +10,9 @@
 # would be a permanent exemption from shrinking that nobody could later prove
 # unnecessary.
 #
-# Nothing in this app is reached by reflection. Manifest components are kept by
-# R8 from the merged manifest, and the ViewModel is built by a lambda rather than
-# by `Class.newInstance`.
+# Almost nothing in this app is reached by reflection. Manifest components are
+# kept by R8 from the merged manifest, and the ViewModel is built by a lambda
+# rather than by `Class.newInstance`. The exception is the C boundary, below.
 #
 # Two settings are stored as `Enum.name`, so their constants' names are the
 # storage format. No keep rule appears here for them, and one would not help if
@@ -29,3 +29,26 @@
 # of the source tree.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# The C boundary.
+#
+# JNA reads a Structure's fields by reflection to compute the native layout, and
+# builds a callback trampoline from a Callback interface's single method. Neither
+# is a call R8 can see, so shrinking or renaming either one produces a struct
+# whose fields land at the wrong offsets, or a trampoline with no method to call.
+# There is no diagnostic for that: the native side reads whatever bytes are
+# there. These rules are the narrowest that keep both intact.
+#
+# @FieldOrder is what fixes declaration order, so the annotation is kept too;
+# without it JNA falls back to asking the JVM for a field order it does not
+# promise.
+-keep class com.sun.jna.** { *; }
+-keep class * extends com.sun.jna.Structure { *; }
+-keep class * implements com.sun.jna.Callback { *; }
+-keep interface * extends com.sun.jna.Library { *; }
+-keepattributes *Annotation*
+
+# JNA compiles against desktop and Windows APIs that are absent on Android and
+# unreachable from it. R8 reports them as missing rather than as unused.
+-dontwarn java.awt.**
+-dontwarn com.sun.jna.platform.**

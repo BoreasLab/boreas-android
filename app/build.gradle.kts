@@ -1,7 +1,184 @@
+import java.net.URI
+import java.security.MessageDigest
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+/**
+ * The ABIs this app ships, and the single place the set is decided.
+ *
+ * Three, not four. `armeabi-v7a` is deliberately absent from the contract
+ * (api/android.md#no-32-bit-arm), and Google's 64-bit requirement runs one way
+ * only: 32-bit obliges 64-bit, never the reverse.
+ *
+ * The pinned archive nevertheless *contains* an `armeabi-v7a` build, which the
+ * contract says it does not. Naming the three here is therefore load-bearing
+ * rather than decorative: it is what keeps the fourth out of the APK, both by
+ * filtering the unpack below and by filtering the packaging step. Both derive
+ * from this one list, so the two cannot disagree.
+ */
+val boreasAbis = listOf("arm64-v8a", "x86_64", "x86")
+
+/** The pinned release. Its digest is checked on every fetch. */
+val boreasPin = Properties().apply {
+    rootProject.file("gradle/boreas-core.properties").inputStream().use(::load)
+}
+
+fun pinned(key: String): String =
+    requireNotNull(boreasPin.getProperty(key)) { "gradle/boreas-core.properties has no '$key'" }
+
+/**
+ * Downloads the pinned core archive, checks its digest, and unpacks exactly the
+ * three ABIs above plus the header.
+ *
+ * The archive is a build input like any other, so it is verified on the way in
+ * rather than trusted because it arrived. A digest mismatch deletes the file and
+ * fails: a corrupted download must not become a cached one. Build provenance is
+ * the stronger check and runs in CI, where the workflow that produced the
+ * archive can be named; see .github/workflows/ci.yml.
+ */
+abstract class FetchBoreasCore : DefaultTask() {
+
+    @get:Input
+    abstract val tag: Property<String>
+
+    @get:Input
+    abstract val archive: Property<String>
+
+    @get:Input
+    abstract val sha256: Property<String>
+
+    @get:Input
+    abstract val abis: ListProperty<String>
+
+    /** Asserted against the header in the archive, so the pin cannot drift from it. */
+    @get:Input
+    abstract val abiVersion: Property<Int>
+
+    /** Survives `clean`; the archive is 23 MB and its identity is its digest. */
+    @get:Internal
+    abstract val cacheDirectory: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val destination: DirectoryProperty
+
+    @get:Inject
+    abstract val archives: ArchiveOperations
+
+    @get:Inject
+    abstract val fs: FileSystemOperations
+
+    @TaskAction
+    fun fetch() {
+        val expected = sha256.get()
+        val cached = cacheDirectory.get().asFile.resolve("${tag.get()}/${archive.get()}")
+
+        if (!cached.isFile || digestOf(cached) != expected) {
+            cached.parentFile.mkdirs()
+            val url = "https://github.com/BoreasLab/boreas-core/releases/download/" +
+                "${tag.get()}/${archive.get()}"
+            logger.lifecycle("Fetching $url")
+            val partial = File(cached.parentFile, "${cached.name}.part")
+            URI(url).toURL().openStream().use { source ->
+                partial.outputStream().use(source::copyTo)
+            }
+            // Rename only after the whole body arrived, so an interrupted download
+            // cannot be mistaken for a cached one on the next build.
+            partial.renameTo(cached)
+        }
+
+        val actual = digestOf(cached)
+        if (actual != expected) {
+            cached.delete()
+            throw GradleException(
+                "Boreas core archive digest mismatch for ${tag.get()}\n" +
+                    "  expected $expected\n" +
+                    "  actual   $actual\n" +
+                    "The file has been deleted. Check gradle/boreas-core.properties.",
+            )
+        }
+
+        val staging = temporaryDir.resolve("unpacked")
+        fs.delete { delete(staging, destination) }
+        fs.copy {
+            from(archives.tarTree(archives.gzip(cached)))
+            into(staging)
+        }
+
+        val out = destination.get().asFile
+        // Named one by one rather than copied wholesale: the set of ABIs shipped is
+        // a decision, and a fourth appearing in the archive must not silently ship.
+        for (abi in abis.get()) {
+            val library = staging.resolve("jniLibs/$abi/libboreas.so")
+            if (!library.isFile) {
+                throw GradleException("${archive.get()} carries no jniLibs/$abi/libboreas.so")
+            }
+            library.copyTo(out.resolve("jniLibs/$abi/libboreas.so"), overwrite = true)
+        }
+
+        val header = staging.resolve("include/boreas.h")
+        if (!header.isFile) {
+            throw GradleException("${archive.get()} carries no include/boreas.h")
+        }
+
+        // The header is the authority for the ABI number; the pin file only records
+        // it so that it is available before the archive exists. Disagreement here
+        // means the pin was updated without adopting the ABI change, which would
+        // compile a stale constant into the startup check that exists to catch
+        // exactly that.
+        val declared = Regex("""#define\s+BOREAS_ABI_VERSION\s+(\d+)u?""")
+            .find(header.readText())?.groupValues?.get(1)?.toInt()
+            ?: throw GradleException("boreas.h in ${archive.get()} defines no BOREAS_ABI_VERSION")
+        if (declared != abiVersion.get()) {
+            throw GradleException(
+                "Boreas ABI version mismatch for ${tag.get()}\n" +
+                    "  gradle/boreas-core.properties says abiVersion=${abiVersion.get()}\n" +
+                    "  the shipped boreas.h says              $declared\n" +
+                    "Read api/stability.md, then update the pin in the same commit.",
+            )
+        }
+
+        header.copyTo(out.resolve("include/boreas.h"), overwrite = true)
+    }
+
+    private fun digestOf(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { stream ->
+            val buffer = ByteArray(1 shl 16)
+            while (true) {
+                val read = stream.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+}
+
+val boreasCoreDirectory: Provider<Directory> = layout.buildDirectory.dir("boreas/core")
+
+val fetchBoreasCore = tasks.register<FetchBoreasCore>("fetchBoreasCore") {
+    description = "Downloads, verifies, and unpacks the pinned Boreas core release."
+    group = "build setup"
+    tag.set(pinned("tag"))
+    archive.set(pinned("archive"))
+    sha256.set(pinned("sha256"))
+    abiVersion.set(pinned("abiVersion").toInt())
+    abis.set(boreasAbis)
+    cacheDirectory.set(File(gradle.gradleUserHomeDir, "boreas-core"))
+    destination.set(boreasCoreDirectory)
+}
+
+/**
+ * The unpacked libraries are a prebuilt input rather than something this project
+ * generates, so they are registered as a static source directory and filled in by
+ * `fetchBoreasCore`. AGP checks that the folder exists while it configures, which
+ * is earlier than any task runs, so it is created here.
+ */
+val boreasJniLibs: File = boreasCoreDirectory.get().asFile.resolve("jniLibs").apply { mkdirs() }
 
 android {
     namespace = "dev.boreaslab.boreas"
@@ -19,11 +196,23 @@ android {
         // isAlwaysOn() and isLockdownEnabled() arrive at 29, and below that the
         // app cannot read always-on state at all. Raising the floor deletes an
         // entire "cannot know" variant from the model rather than guarding it.
+        //
+        // It also clears the core's own floor twice over: api/android.md asks for
+        // minSdk >= 23, and the shipped binaries are built against API 26.
         minSdk = 29
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0-a1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            //noinspection ChromeOsAbiSupport -- see boreasAbis: three is the contract.
+            abiFilters += boreasAbis
+        }
+
+        // Read at load and compared with boreas_abi_version(). See BoreasLibrary.
+        buildConfigField("int", "BOREAS_ABI_VERSION", pinned("abiVersion"))
+        buildConfigField("String", "BOREAS_CORE_TAG", "\"${pinned("tag")}\"")
     }
 
     buildTypes {
@@ -82,8 +271,24 @@ android {
 
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // useLegacyPackaging is deliberately unset. With minSdk >= 23 that stores
+        // .so files uncompressed and page-aligned, which is what both 16 KB
+        // compliance and a direct mmap out of the APK need. api/android.md asks
+        // for exactly this, and android:extractNativeLibs must stay out of the
+        // manifest because AGP replaced it with this DSL in 4.2.0.
     }
 }
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.jniLibs?.addStaticSourceDirectory(boreasJniLibs.absolutePath)
+    }
+}
+
+// A static source directory carries no task dependency, so the fetch is ordered
+// here. preBuild precedes every variant task, which is what the jniLibs merge and
+// the packaging step both need.
+tasks.named("preBuild") { dependsOn(fetchBoreasCore) }
 
 kotlin {
     compilerOptions {
@@ -104,6 +309,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.service)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.datastore.preferences)
+
+    // The C boundary is the interface (api/README.md), and Kotlin cannot produce a
+    // C function pointer. JNA builds the two vtables' trampolines; the alternative
+    // is a JNI shim, which needs the NDK. See docs/platform-integration.md.
+    implementation(libs.jna) { artifact { type = "aar" } }
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.foundation)
