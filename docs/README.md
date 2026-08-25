@@ -12,5 +12,6 @@ interfaces that still require a `boreas-core` change.
 | [Verified Inputs](verified-inputs.md) | fact-checked platform inputs, source links, and unresolved decisions |
 | [Build Inputs](build-inputs.md) | the A0 record: pinned versions, SDK levels, module split, dependencies |
 | [Design System](design-system.md) | tokens, measured contrast, type scale, component inventory |
+| [Release](release.md) | the tag algebra, versionCode packing, pipeline shape, signing |
 
 The related core specifications are [platforms](https://github.com/BoreasLab/boreas-core/blob/main/docs/platforms.md), [architecture](https://github.com/BoreasLab/boreas-core/blob/main/docs/architecture.md), and the [verification ledger](https://github.com/BoreasLab/boreas-core/blob/main/docs/verification.md).

@@ -28,7 +28,7 @@ this one.
 
 | Input | Blocked on |
 |---|---|
-| Signing model | No release candidate exists. |
+| Signing keys | The pipeline reads four repository secrets and names its assets `-unsigned` when they are absent. Nobody has set them, so today's releases are unsigned. See docs/release.md. |
 | WireGuard egress | A screen that collects an endpoint and three raw keys. The ABI offers the variant; nothing here can produce one, so the domain does not model a state it could never reach. |
 | Remote filter lists | Fetching, storing, and refreshing a list by URL. Rules are typed in today, which is enough to exercise reload and to block a name. |
 | `libc++_shared.so` | The core's archive. `libboreas.so` needs it and the archive does not carry it, so the library cannot load on a device. Reported upstream; see docs/verified-inputs.md. |
