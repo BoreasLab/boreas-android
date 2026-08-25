@@ -24,30 +24,25 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-/** What the surface can ask the session owner to do. A closed set. */
+/** Commands accepted by the session owner. */
 public sealed interface SessionCommand {
     public data class Start(val engine: EngineConfig, val platform: PlatformConfig) : SessionCommand
 
-    /** Push a changed policy at a running session, or say why it cannot be pushed. */
+    /** Pushes a changed policy at a running session, or reports why it cannot. */
     public data class Reconfigure(val engine: EngineConfig) : SessionCommand
 
-    /** Platform-boundary parse failed before startup; controller remains sole state writer. */
+    /** Reports a platform-boundary parse failure before startup. */
     public data class Reject(val operation: Operation, val failure: TypedFailure) : SessionCommand
 
     public data object Stop : SessionCommand
 }
 
 /**
- * Owns session lifecycle.
- *
- * One command loop cancels and joins the prior transition before starting the next.
- * A one-slot channel drops stale commands. Cancellation releases resources, returns
- * to [VpnLifecycleState.Stopped], and is rethrown rather than treated as failure.
- *
- * It is also the single reader of the engine's event stream. The ABI allows one
- * reader at a time and queues a second behind the first, so a second collector
- * elsewhere would not race, it would quietly take half the events. Everything the
- * UI knows about a session is therefore folded here and published from here.
+ * Owns session lifecycle. The command loop cancels and joins each prior transition
+ * before starting the next; its one-slot channel drops stale commands. Cancellation
+ * releases resources, returns to [VpnLifecycleState.Stopped], and is rethrown.
+ * This is also the sole reader of the engine event stream because the ABI permits
+ * one reader at a time.
  */
 public class SessionController(
     private val engineProvider: suspend () -> EngineHost,
@@ -56,17 +51,11 @@ public class SessionController(
     private val now: () -> Long,
 ) {
 
-    /** One bounded latest-state cell; callers see only a read-only [StateFlow]. */
+    /** Bounded latest-state cell exposed as a read-only [StateFlow]. */
     public val state: StateFlow<VpnLifecycleState>
         field = MutableStateFlow<VpnLifecycleState>(VpnLifecycleState.Stopped)
 
-    /**
-     * Newest-first, bounded.
-     *
-     * Separate from [state] on purpose: a resolution arrives per DNS question, and
-     * folding it into the lifecycle value would make every question a lifecycle
-     * change for anything comparing them.
-     */
+    /** Newest-first bounded resolutions, separate from lifecycle state. */
     public val resolutions: StateFlow<List<ResolvedName>>
         field = MutableStateFlow<List<ResolvedName>>(emptyList())
 
@@ -99,7 +88,7 @@ public class SessionController(
         commands.trySend(command)
     }
 
-    /** Validate, obtain consent, then start; unavailable engines never prompt for consent. */
+    /** Validates, obtains consent, then starts; unavailable engines never prompt. */
     private suspend fun runStart(command: SessionCommand.Start) {
         try {
             val engine = engineProvider()
@@ -142,7 +131,6 @@ public class SessionController(
                     state.value = VpnLifecycleState.Failed(Operation.Start, outcome.failure)
             }
         } catch (cancellation: CancellationException) {
-            // Cancellation releases acquired resources, returns to Stopped, and is rethrown.
             releaseEvents()
             active = null
             state.value = VpnLifecycleState.Stopped
@@ -151,13 +139,8 @@ public class SessionController(
     }
 
     /**
-     * Push a policy change at the running session, or refuse it as needing a restart.
-     *
-     * Reload replaces the rules in force and nothing else: the resolver, the
-     * intercepted host list, the egress, and the ceilings are fixed at start. That
-     * is the core's rule, so the decision is [reachesRunning]'s and not this
-     * method's, and a change that does not reach becomes a typed failure rather
-     * than a silent no-op.
+     * Pushes a policy change or reports that it needs a restart. Reload changes only
+     * rules; [reachesRunning] enforces the fixed resolver, hosts, egress, and ceilings.
      */
     private suspend fun runReconfigure(command: SessionCommand.Reconfigure) {
         val running = state.value as? VpnLifecycleState.Running ?: return
@@ -180,11 +163,9 @@ public class SessionController(
     }
 
     private suspend fun runStop() {
-        // Exhaustive match prevents a new lifecycle variant from silently ignoring Stop.
         val session = when (val now = state.value) {
             is VpnLifecycleState.Running -> now.session
             is VpnLifecycleState.Stopping -> now.session
-            // No state owns a session, so Stop is already idempotent.
             VpnLifecycleState.Stopped,
             VpnLifecycleState.AwaitingConsent,
             VpnLifecycleState.Starting,
@@ -208,10 +189,7 @@ public class SessionController(
         }
     }
 
-    /**
-     * Folds the event stream into the running state, dropping anything from a
-     * session that has since ended rather than applying it to a newer one.
-     */
+    /** Folds events into the matching running session and ignores stale sessions. */
     private fun followEvents(engine: EngineHost, session: SessionId) {
         releaseEvents()
         eventJob = scope.launch {
@@ -225,7 +203,7 @@ public class SessionController(
         }
     }
 
-    /** O(RESOLUTION_LIMIT) per question, which is a bounded copy of a small list. */
+    /** Records a resolution in O(RESOLUTION_LIMIT) time. */
     private fun record(event: CoreEvent.Resolved) {
         val entry = ResolvedName(
             atMillis = now(),
@@ -243,13 +221,9 @@ public class SessionController(
     }
 
     /**
-     * Ends the loop, then stops whatever it was running.
-     *
-     * In that order. The engine's resources are not coroutines -- a native handle
-     * and a real reader thread -- so cancelling the scope releases none of them,
-     * and a stop submitted as a command would be cancelled along with everything
-     * else. The loop is closed first so that [runStop] here cannot race one
-     * running there.
+     * Ends the command loop before stopping the active engine. Native resources do
+     * not release when the coroutine scope is cancelled, and closing the loop first
+     * prevents [runStop] from racing a queued stop.
      */
     public suspend fun shutdown() {
         commands.close()
@@ -260,7 +234,7 @@ public class SessionController(
     }
 
     private companion object {
-        /** Enough to read, small enough that prepending stays cheap under a flood. */
+        /** Bounds retained resolutions while keeping prepending cheap. */
         const val RESOLUTION_LIMIT = 200
     }
 }

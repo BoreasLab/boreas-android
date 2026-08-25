@@ -6,23 +6,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * The struct layouts, asserted from this side of the boundary.
- *
- * `boreas.h` pins every one of these from the C side, with static assertions that
- * fail a host's build rather than letting it read the wrong bytes. Those
- * assertions protect a host that compiles the header. This app does not compile
- * it: JNA computes the layout at run time from the declarations in `Structs.kt`,
- * so nothing checks them until a device does, and what a device shows is a field
- * read from the middle of another field, silently.
- *
- * These are the same numbers, checked where the declarations are. They run on a
- * plain JVM against the same JNA that will compute the layout on the device, so a
- * reordered field or a wrong width is a failing test in CI rather than an
- * inexplicable tunnel later.
- *
- * The widths are written in terms of `Native.POINTER_SIZE`, exactly as the header
- * writes them in terms of `sizeof(void *)`, so one expression is correct on all
- * three shipped ABIs.
+ * Checks JNA layouts against the widths and offsets pinned by `boreas.h`. The
+ * tests use `Native.POINTER_SIZE`, matching `sizeof(void *)` across shipped ABIs.
  */
 class BoreasLayoutTest {
 
@@ -32,13 +17,12 @@ class BoreasLayoutTest {
     private fun sizeOf(structure: Structure): Int = structure.size()
     private fun offsetOf(structure: BoreasStruct, field: String): Int = structure.offsetOf(field)
 
-    // The scalars the type table warns about.
+    // Scalar widths that affect every following field.
 
     @Test
     fun `size_t and intptr_t are pointer-width, which is what a wrong choice would break`() {
         assertEquals("size_t must be pointer-width", pointer, sizeT)
-        // What JNA will actually marshal it as, rather than what the constructor
-        // was told: a width that disagreed here would shift every field after it.
+        // The marshalled width must match the platform pointer width.
         val marshalled = if (SizeT().nativeType() == Long::class.javaObjectType) 8 else 4
         assertEquals(pointer, marshalled)
     }
@@ -53,8 +37,7 @@ class BoreasLayoutTest {
         )
     }
 
-    // The vtables this app fills in by hand, where a shifted field is a call
-    // through the wrong function pointer rather than a compile error.
+    // Vtable offsets: a shift would call the wrong function pointer.
 
     @Test
     fun `BoreasDevice puts context first and mtu after five pointers`() {
@@ -70,8 +53,7 @@ class BoreasLayoutTest {
         assertEquals(3 * pointer, sizeOf(bypass))
     }
 
-    // The structs this app reads back. `blocked` is the one that moves under
-    // -fshort-enums, which is what makes these worth their lines.
+    // Read-back structs. `blocked` shifts under `-fshort-enums`.
 
     @Test
     fun `BoreasEvent puts kind first and blocked at offset four`() {
@@ -124,27 +106,22 @@ class BoreasLayoutTest {
         assertEquals(pointer, offsetOf(wireguard, "privateKey"))
         assertEquals(pointer + 32, offsetOf(wireguard, "peerPublicKey"))
         assertEquals(pointer + 64, offsetOf(wireguard, "presharedKey"))
-        // A key of thirty-two zeroes is a key someone may have configured, so the
-        // flag has to be a field rather than an inference from the bytes.
+        // Zero bytes can be a configured key, so presence is a separate field.
         assertEquals(pointer + 96, offsetOf(wireguard, "hasPresharedKey"))
     }
 
-    // Every bool is one byte. This is the trap the header spends a paragraph on.
+    // Boolean fields are one byte.
 
     @Test
     fun `every bool field is one byte, not four`() {
         val event = BoreasEvent()
-        // The counters are last, so the struct ends where they do. A four-byte
-        // `blocked` would push every field after it and change this total.
+        // A four-byte `blocked` would shift the trailing counters.
         assertEquals(
             sizeOf(event),
             offsetOf(event, "counters") + 6 * Long.SIZE_BYTES,
         )
 
-        // `rewriteDocuments` is a bool and `mtu` a uint16_t, so the gap is the
-        // bool plus one byte of alignment padding. It is 2 for a one-byte bool
-        // and 4 for the four-byte one a C# host would get by default, which is
-        // the mistake the header spends a paragraph on.
+        // The one-byte boolean plus alignment gives a two-byte gap before `mtu`.
         val config = BoreasConfig()
         assertEquals(2, offsetOf(config, "mtu") - offsetOf(config, "rewriteDocuments"))
     }

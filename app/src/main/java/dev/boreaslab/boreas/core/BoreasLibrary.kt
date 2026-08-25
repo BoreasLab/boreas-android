@@ -10,15 +10,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * The six functions, plus the version check and the Android bypass builder.
- *
- * Declared against the shipped `boreas.h`, at the widths api/abi.md fixes. Every
- * one of them returns a `BoreasStatus` and nothing signals failure any other way;
- * none sets `errno`.
- *
- * Every one of them also blocks the calling thread. There is no async variant, by
- * design, and `nextEvent` in particular parks indefinitely, so nothing here may be
- * called from the main thread.
+ * JNA declaration of the six blocking C functions, at the widths in api/abi.md.
+ * Failures return [BoreasStatus] rather than setting `errno`; `nextEvent` may
+ * park indefinitely, so callers must stay off the main thread.
  */
 @Suppress("FunctionNaming") // These are C symbols; the names are not ours to choose.
 internal interface BoreasLibrary : Library {
@@ -63,21 +57,15 @@ internal interface BoreasLibrary : Library {
     fun boreas_tunnel_free(handle: Pointer?): Int
 }
 
-/** The library, or the reason there is not one. A closed set, resolved exactly once. */
+/** Library handle or its load failure, resolved exactly once. */
 internal sealed interface CoreLibrary {
     data class Linked(val library: BoreasLibrary) : CoreLibrary
     data class Absent(val failure: TypedFailure) : CoreLibrary
 }
 
 /**
- * What a screen may know about the load, without holding the library itself.
- *
- * [Checking] is a real state rather than a placeholder: resolving the load means
- * dlopen on a 17 MB object, which does not belong on the main thread, so there is
- * a moment before the answer exists.
- *
- * Public where the rest of this package is not, because it crosses into the UI
- * and carries no handle: the library itself stays behind [CoreLibrary].
+ * UI-visible load state without exposing the library handle. [Checking] covers
+ * the off-main-thread `dlopen` of the 17 MB shared object.
  */
 sealed interface EngineLoad {
     data object Checking : EngineLoad
@@ -86,17 +74,9 @@ sealed interface EngineLoad {
 }
 
 /**
- * Loads the shared object and refuses it if it is not the one this app was built
- * against.
- *
- * The comparison happens here, before anything else, because that is the only
- * cheap moment. A library whose ABI differs reads every field at the wrong offset
- * and behaves inexplicably; there is no later point at which the cause is
- * recoverable from the symptom.
- *
- * Resolved once and remembered. Both outcomes are values rather than exceptions,
- * so a device where the load fails shows a sentence instead of a crash, and the
- * failure is one the lifecycle already knows how to display.
+ * Loads the shared object and rejects an ABI mismatch before any struct access.
+ * The result is memoized as a value so load failures reach the lifecycle instead
+ * of escaping as crashes.
  */
 internal object BoreasCore {
 
@@ -104,19 +84,12 @@ internal object BoreasCore {
 
     val library: CoreLibrary by lazy { load() }
 
-    /**
-     * The last defect JNA caught on its way out of a callback.
-     *
-     * Every callback catches for itself, so anything that reaches the handler
-     * came from JNA's own marshalling rather than from the body. Discarding it
-     * would leave no trace of a call that returned whatever was in the return
-     * register, so it is kept for the diagnostics screen.
-     */
+    /** Last defect JNA caught while returning from a callback. */
     @Volatile
     var lastCallbackDefect: Throwable? = null
         private set
 
-    /** Resolves the load off the caller's thread and reports it without the handle. */
+    /** Resolves the load off the caller's thread without exposing the handle. */
     suspend fun describe(): EngineLoad = withContext(Dispatchers.IO) {
         when (val resolved = library) {
             is CoreLibrary.Linked -> EngineLoad.Linked(BuildConfig.BOREAS_ABI_VERSION)
@@ -128,9 +101,7 @@ internal object BoreasCore {
         val loaded = try {
             Native.load(LIBRARY, BoreasLibrary::class.java)
         } catch (error: UnsatisfiedLinkError) {
-            // The dynamic linker refused it. On a device that usually means a
-            // dependency of the .so is not in the APK, which is a packaging fact
-            // and not something the user can act on.
+            // A missing .so dependency is an APK packaging failure.
             return CoreLibrary.Absent(TypedFailure.CoreNotLoaded(error.message ?: "unlinkable"))
         } catch (error: NoClassDefFoundError) {
             return CoreLibrary.Absent(TypedFailure.CoreNotLoaded(error.message ?: "no binding"))
@@ -148,10 +119,7 @@ internal object BoreasCore {
             )
         }
 
-        // A callback that throws would otherwise return whatever was in the return
-        // register. Every callback below also catches for itself; this is the net
-        // under that, and it is why nothing here can turn a Kotlin bug into a
-        // packet written from uninitialised memory.
+        // Prevent callback exceptions from returning an undefined C value.
         Native.setCallbackExceptionHandler { _, error -> lastCallbackDefect = error }
 
         return CoreLibrary.Linked(loaded)

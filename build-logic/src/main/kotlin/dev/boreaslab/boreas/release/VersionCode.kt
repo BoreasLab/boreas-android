@@ -1,20 +1,10 @@
 package dev.boreaslab.boreas.release
 
 /**
- * Commits since the newest release tag.
- *
- * One anchor, matching the one operand the base version has. A code repeats only
- * if the triple *and* the revision repeat, and cutting a tag moves both at once:
- * the count restarts at zero inside a namespace nothing has used yet.
- *
- * With no release tag the count runs from the repository root, which is a real
- * hazard rather than a theoretical one -- boreas-core reached 108 commits with
- * zero releases, and this field holds 255. v0.0.0 was cut before this code
- * existed for exactly that reason, and it is why [Version.successor] is total.
- *
- * The other hazard is a force-push to main, which changes a commit count and can
- * make a later build repeat an earlier code. Play rejects a duplicate, which is
- * the good outcome; branch protection forbidding force-push is the real fix.
+ * Commits since the newest release tag. Without a release tag, the count starts
+ * at the repository root; `v0.0.0` reserves the revision range's initial space
+ * because boreas-core had 108 commits before its first release. A force-push can
+ * repeat a count and therefore a code; branch protection prevents that case.
  */
 @JvmInline
 value class Revision private constructor(val count: Int) {
@@ -23,24 +13,16 @@ value class Revision private constructor(val count: Int) {
 
     companion object {
 
-        /** 8 bits, so the field holds 0 through 255. */
+        /** Eight-bit field holding 0 through 255. */
         const val CEILING: Int = 255
 
         /**
-         * What a release takes: the field's maximum.
-         *
-         * The obvious encoding gives a release the revision it was cut at, which
-         * would put it *below* every pre-release that led to it and make Play
-         * reject the release as a downgrade. The maximum reproduces what SemVer
-         * already does with the same intent: a pre-release of X ranks below the
-         * release of X.
+         * Maximum revision for a release. Using its cut count would place the
+         * release below its preceding pre-releases and cause a Play downgrade.
          */
         val RELEASED: Revision = Revision(CEILING)
 
-        /**
-         * A pre-release revision, which stops one short of the maximum because
-         * the maximum belongs to the release.
-         */
+        /** Pre-release revision, one below the release maximum. */
         fun of(count: Int, version: Version): Decided<Revision> =
             if (count in 0 until CEILING) {
                 Decided.Accepted(Revision(count))
@@ -51,27 +33,10 @@ value class Revision private constructor(val count: Int) {
 }
 
 /**
- * The monotonically increasing integer Android installs by.
- *
- *     major 6 bits | minor 8 bits | patch 8 bits | revision 8 bits
- *
- * Byte aligned deliberately, so `0x00010107` reads as 0.1.1 revision 7 at a
- * glance. A split straddling byte boundaries costs nothing to compute and
- * everything to read at three in the morning.
- *
- * **The law is order preservation.** For publishes `a < b` by SemVer precedence,
- * `code(a) < code(b)`; the tag order embeds into the integers, and the embedding
- * is tested as a property over a simulated history rather than at hand-picked
- * points.
- *
- * **The ceiling is not 2^31.** Google Play's maximum is 2,100,000,000, which is
- * *below* `Int.MAX_VALUE`, so a 31-bit packing overflows something that looks
- * like it fits. Thirty bits reach 1,073,741,823 and cannot.
- *
- * Every field and the total are checked, and a violation is refused rather than
- * wrapped: `shl` truncates in silence, so a 64th major version would land
- * outside its field and corrupt the one above it, and a number already accepted
- * by Play cannot be withdrawn.
+ * Android install code packed as 6 major bits, 8 minor bits, 8 patch bits, and
+ * 8 revision bits. The embedding preserves SemVer order. Google Play's maximum
+ * is 2,100,000,000, below `Int.MAX_VALUE`, so every field and the packed total
+ * are checked before narrowing; see developer.android.com/studio/publish/versioning.
  */
 @JvmInline
 value class VersionCode private constructor(val value: Int) {
@@ -93,7 +58,7 @@ value class VersionCode private constructor(val value: Int) {
         private const val MINOR_CEILING = (1L shl MINOR_BITS) - 1
         private const val PATCH_CEILING = (1L shl PATCH_BITS) - 1
 
-        /** developer.android.com/studio/publish/versioning. Below `Int.MAX_VALUE`, which is the trap. */
+        /** Google Play's published ceiling, below `Int.MAX_VALUE`. */
         const val PLAY_CEILING: Int = 2_100_000_000
 
         fun of(version: Version, revision: Revision): Decided<VersionCode> {
@@ -104,8 +69,7 @@ value class VersionCode private constructor(val value: Int) {
             overflow("patch", version.patch, PATCH_BITS, PATCH_CEILING)
                 ?.let { return Decided.Refused(it) }
 
-            // Assembled in Long and narrowed only after the total has been
-            // checked, so the check cannot be the thing that overflows.
+            // Check in Long before narrowing to Int.
             val packed = (version.major shl MAJOR_SHIFT) or
                 (version.minor shl MINOR_SHIFT) or
                 (version.patch shl PATCH_SHIFT) or
