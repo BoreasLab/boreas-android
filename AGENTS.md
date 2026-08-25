@@ -17,9 +17,14 @@ the JDK, SDK, Gradle, Kotlin artifacts, caches, and temporary HOME under `/tmp`.
   creation, foreground-service compliance, routes, and lifecycle callbacks.
 - The Rust engine receives an ordered raw-IP device and owns all L3 through L7
   semantics. Do not create an Android-specific datapath or duplicate policy.
-- A `ParcelFileDescriptor` has exactly one owner at every instant. Once Kotlin
-  calls `detachFd()`, native Rust owns and closes the returned descriptor exactly
-  once. Kotlin must neither use nor close it afterwards.
+- A `ParcelFileDescriptor` has exactly one owner at every instant, and that
+  owner is this app. The core never closes a descriptor it was given: with
+  `getFd()` the `ParcelFileDescriptor` keeps ownership and must be closed
+  through its own API, and with `detachFd()` the responsibility moves to the
+  caller's native code. This app uses `getFd()`, so a double close is not a
+  rule to follow but a state it cannot reach. The close happens after the
+  device vtable's `release` callback has run, never before: a `recv` already
+  inside the callback keeps running after its task is abandoned.
 - Every egress socket must be protected by `VpnService.protect(fd)` before it
   connects. A false result is an error, never a fallback that risks a tunnel
   loop.
@@ -32,13 +37,13 @@ the JDK, SDK, Gradle, Kotlin artifacts, caches, and temporary HOME under `/tmp`.
 
 ## Boundary Rules
 
-- The handoff contract in [docs/core-contract.md](docs/core-contract.md) is a
-  logical interface, not an implemented ABI. Do not invent exported symbols in
-  the app layer; add them with the matching core change and tests.
-- UniFFI is a supported Kotlin binding route for value/control types. It does
-  not erase file-descriptor ownership. The descriptor transfer needs one
-  explicit, reviewed native boundary as specified in
-  [docs/platform-integration.md](docs/platform-integration.md).
+- The contract is `boreas-core/api/`, and it is sufficient by construction. If
+  making progress needs `src/` or `ffi/src/`, stop and report which api/ page
+  should have carried it. That is a documentation defect and it is fixed there.
+  [docs/core-contract.md](docs/core-contract.md) records how this repository
+  maps onto it and holds nothing the contract does not.
+- Do not invent exported symbols. The surface is six functions, two vtables,
+  and one config struct; nothing else is supported.
 - Raw packets flow only through the TUN descriptor and the native engine. The
   UI sees status, counters, and typed errors only.
 

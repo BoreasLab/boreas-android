@@ -1,5 +1,6 @@
 package dev.boreaslab.boreas.service
 
+import dev.boreaslab.boreas.model.ResolvedName
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -24,6 +25,15 @@ object SessionStateBus {
     val log: StateFlow<List<TransitionRecord>>
         field = MutableStateFlow<List<TransitionRecord>>(emptyList())
 
+    /**
+     * Newest-first answered questions, mirrored from the controller.
+     *
+     * Bounded there, not here: the controller is the single reader of the event
+     * stream, so it is also the only thing that can decide what a full list means.
+     */
+    val resolutions: StateFlow<List<ResolvedName>>
+        field = MutableStateFlow<List<ResolvedName>>(emptyList())
+
     internal fun publish(state: VpnLifecycleState, atMillis: Long) {
         this.state.value = state
         log.value = (listOf(TransitionRecord(atMillis, state)) + log.value).take(LOG_LIMIT)
@@ -32,6 +42,10 @@ object SessionStateBus {
     /** Counter updates avoid adding log entries. */
     internal fun publishStatusOnly(state: VpnLifecycleState) {
         this.state.value = state
+    }
+
+    internal fun publishResolutions(entries: List<ResolvedName>) {
+        resolutions.value = entries
     }
 
     internal fun publishAlwaysOn(state: AlwaysOn) {

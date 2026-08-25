@@ -27,9 +27,7 @@
     <string name="action_retry">Try again</string>
     <string name="action_cancel">Cancel</string>
 
-    <string name="session_label">Session</string>
     <string name="session_uptime">Uptime</string>
-    <string name="session_profile">Profile</string>
 
     <!-- Typed failures. Each names what happened, what it means, and the next step. -->
     <string name="fail_engine_unavailable_title">The packet engine is not in this build</string>
@@ -66,16 +64,6 @@
     <!-- Activity. The title states the question the screen answers. -->
     <string name="activity_title">What has the tunnel handled?</string>
     <string name="activity_since">Counted since %1$s</string>
-    <string name="activity_group_flows">Flows</string>
-    <string name="activity_group_transfer">Transfer</string>
-    <string name="activity_group_upstream">Upstream</string>
-    <string name="metric_flows_active">Active</string>
-    <string name="metric_flows_accepted">Accepted</string>
-    <string name="metric_flows_denied">Denied by policy</string>
-    <string name="metric_bytes_in">Received</string>
-    <string name="metric_bytes_out">Sent</string>
-    <string name="metric_upstream_kind">Route</string>
-    <string name="metric_upstream_protected">Sockets bypassed</string>
 
     <string name="activity_empty_title">No counters yet</string>
     <string name="activity_empty_detail">The engine reports counters while a session runs. Start the tunnel to collect the first set.</string>
@@ -83,24 +71,8 @@
 
     <!-- Policy. Owned by the engine; this screen only chooses values. -->
     <string name="policy_intro">The engine decides what happens to every packet. These choices are handed to it when a session starts.</string>
-    <string name="policy_group_filtering">Filtering</string>
-    <string name="policy_profile_off">Off</string>
-    <string name="policy_profile_off_detail">Packets pass through unchanged. Useful for isolating whether Boreas is involved in a problem.</string>
-    <string name="policy_profile_standard">Standard</string>
-    <string name="policy_profile_standard_detail">Blocks known tracking and advertising endpoints. Leaves everything else alone.</string>
-    <string name="policy_profile_strict">Strict</string>
-    <string name="policy_profile_strict_detail">Adds telemetry and fingerprinting endpoints. Breaks some apps that treat those endpoints as required.</string>
 
-    <string name="policy_group_inspection">Inspection</string>
-    <string name="policy_tls">Inspect TLS connections</string>
-    <string name="policy_tls_detail">Lets the engine read inside HTTPS so rules can act on more than the hostname. Requires the Boreas certificate.</string>
-    <string name="policy_tls_blocked">Install the certificate first under Settings, then Certificate.</string>
 
-    <string name="policy_group_egress">Egress</string>
-    <string name="policy_egress_direct">Direct</string>
-    <string name="policy_egress_direct_detail">The engine opens its own sockets. Each one is bypassed around the tunnel before it connects.</string>
-    <string name="policy_egress_proxy">Through a proxy</string>
-    <string name="policy_egress_proxy_detail">Hands upstream traffic to a proxy you configure.</string>
 
     <string name="policy_pending_title">Changes are not applied yet</string>
     <string name="policy_pending_detail">The running session keeps its current policy until you restart the tunnel.</string>
@@ -173,7 +145,6 @@
     <string name="certificate_absent">Not installed</string>
     <string name="certificate_absent_detail">TLS inspection stays off until the certificate is installed.</string>
     <string name="certificate_present">Installed</string>
-    <string name="certificate_install">Install certificate</string>
     <string name="certificate_scope_title">What this certificate can and cannot do</string>
     <string name="certificate_scope_user">It goes in the personal store, so only apps that opt in to personal certificates will honor it. Many apps pin their own and will not.</string>
     <string name="certificate_scope_removal">Removing it is an Android action, not a Boreas one. Boreas can open the screen but cannot delete it for you.</string>
@@ -218,4 +189,86 @@
     <!-- The name the system shows for what was placed on the clipboard. -->
     <string name="diagnostics_clip_label">Boreas transition log</string>
 
+
+    <!-- The session summary, in terms the contract actually reports. -->
+    <string name="session_tier">Tier</string>
+    <string name="tier_off">Carrying</string>
+    <string name="tier_names">Names</string>
+    <string name="tier_requests">Requests</string>
+
+    <!-- Activity: folded from the event stream, which is the whole diagnostic surface. -->
+    <string name="activity_group_names">Names</string>
+    <string name="metric_names_allowed">Allowed</string>
+    <string name="metric_names_blocked">Blocked</string>
+    <string name="metric_rules_blocked">Blocking rules</string>
+    <string name="metric_hosts_inspected">Inspected hosts</string>
+    <string name="activity_group_counters">Needs attention</string>
+    <string name="activity_counters_footnote">A working tunnel reports none of these.</string>
+    <string name="counter_datagrams_dropped">Datagrams dropped</string>
+    <string name="counter_packets_rejected">Malformed packets</string>
+    <string name="counter_quic_steered">QUIC steered to HTTP/2</string>
+    <string name="counter_paths_reported">Packet Too Big sent</string>
+    <string name="counter_events_lost">Events lost</string>
+    <string name="counter_tasks_panicked">Engine faults</string>
+    <string name="activity_group_resolutions">Recent names</string>
+    <string name="activity_resolutions_empty">Nothing has been looked up yet.</string>
+    <string name="activity_blocked">Blocked</string>
+    <string name="activity_allowed">Allowed</string>
+
+    <!-- Policy, disclosed one tier at a time. -->
+    <string name="policy_group_names">Names</string>
+    <string name="policy_names">Filter names</string>
+    <string name="policy_names_detail">Answer lookups on this device and refuse the ones your rules block.</string>
+    <string name="policy_resolver">Resolver</string>
+    <string name="policy_resolver_help">Where allowed lookups go. An address, and a port if it is not 53.</string>
+    <string name="policy_resolver_cleartext_title">Lookups leave in the clear</string>
+    <string name="policy_resolver_cleartext_detail">The engine speaks plain DNS today, so anything between this device and the resolver can read which names you ask for. Prefer a resolver on this network, or one you run.</string>
+    <string name="policy_rules">Rules</string>
+    <string name="policy_rules_help">One rule per line, in AdGuard or uBlock syntax. A line the engine cannot read is skipped, not fatal.</string>
+    <string name="policy_group_requests">Requests</string>
+    <string name="policy_intercept">Inspect requests</string>
+    <string name="policy_intercept_detail">Terminate TLS for the hosts below and filter what is inside.</string>
+    <string name="policy_intercept_hosts">Hosts to inspect</string>
+    <string name="policy_intercept_hosts_help">One name per line. Names only, never patterns or addresses.</string>
+    <string name="policy_intercept_root_title">This forges certificates</string>
+    <string name="policy_intercept_root_detail">Inspection issues a certificate for every host above, signed by a root you install on this device. Keep the list short enough to read.</string>
+    <string name="policy_rewrite">Rewrite pages</string>
+    <string name="policy_rewrite_detail">Edit HTML as it arrives, inside a memory budget the engine holds.</string>
+    <string name="policy_group_nat">Network</string>
+    <string name="policy_nat_intro">What the router in front of this device does to a connection. The engine cannot measure it, and the answer decides whether QUIC survives.</string>
+    <string name="policy_nat_endpoint">Same port for everyone</string>
+    <string name="policy_nat_endpoint_detail">One mapping serves every destination. The most permissive answer.</string>
+    <string name="policy_nat_address">Same port per address</string>
+    <string name="policy_nat_address_detail">A new mapping for each destination address.</string>
+    <string name="policy_nat_address_port">A new port each time</string>
+    <string name="policy_nat_address_port_detail">A new mapping per address and port. Choose this if you are unsure: it never claims more than is true.</string>
+
+    <!-- Certificate: two steps, because Android 11 removed the one-tap route. -->
+    <string name="certificate_fingerprint">SHA-256</string>
+    <string name="certificate_export">Save the certificate</string>
+    <string name="certificate_exported_title">Saved as %1$s</string>
+    <string name="certificate_exported_detail">It is in Downloads. Open Settings, choose to install a CA certificate, and pick that file.</string>
+    <string name="certificate_export_failed">Could not save the certificate</string>
+    <string name="certificate_open_settings">Open Settings</string>
+    <string name="certificate_confirm">I installed it</string>
+    <string name="certificate_confirm_detail">Android does not let this app read your trust store, so it cannot check for itself.</string>
+
+    <!-- Failures the engine can return. -->
+    <string name="fail_core_not_loaded_title">The engine did not load</string>
+    <string name="fail_core_not_loaded_detail">This build cannot run the tunnel on this device. The system reported: %1$s</string>
+    <string name="fail_core_abi_title">The engine does not match this build</string>
+    <string name="fail_core_abi_detail">The app expects one interface version and the library reports another (%1$s). Running anyway would read every value from the wrong place. Reinstall the app.</string>
+    <string name="fail_core_refused_title">The engine refused to start</string>
+    <string name="fail_core_config_detail">The settings describe a tunnel that cannot exist. Check the resolver and the hosts to inspect.</string>
+    <string name="fail_core_egress_detail">The engine could not build its way out to the network.</string>
+    <string name="fail_core_authority_detail">The stored certificate authority was lost or does not match itself. A fresh one will be made; you will need to install it again.</string>
+    <string name="fail_core_termination_detail">Too little room was allowed for the connections inspection needs.</string>
+    <string name="fail_core_io_detail">A socket the tunnel needs could not be opened.</string>
+    <string name="fail_core_stopped_detail">The tunnel had already stopped.</string>
+    <string name="fail_core_defect_detail">This is a fault in the engine rather than something you configured. Please report it.</string>
+    <string name="operation_reload">applying rules</string>
+
+    <!-- Field problems. -->
+    <string name="error_port_range">A port is between 1 and 65535.</string>
+    <string name="error_host_shape">%1$s is not a host name.</string>
 </resources>

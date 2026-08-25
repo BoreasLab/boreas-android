@@ -125,6 +125,9 @@ readonly GRADLE_HOME="$ROOT/gradle-home"
 readonly AAPT2_DIR="$ROOT/aapt2"
 readonly AAPT2_ENTRY="$AAPT2_DIR/aapt2"
 readonly AAPT2_REAL="$AAPT2_DIR/aapt2.x86_64"
+# What is installed at AAPT2_REAL right now. Written last, so an interrupted
+# install leaves no stamp and the next run repeats it rather than trusting it.
+readonly AAPT2_STAMP="$AAPT2_DIR/installed-version"
 readonly ACTIVATE="$ROOT/activate.sh"
 
 # The repository this script belongs to.
@@ -295,16 +298,24 @@ ensure_aapt2() {
     tail -n1 | sed -E 's#</?version>##g')"
   [[ -n "$version" ]] || die "Google publishes no aapt2 for AGP $agp"
 
-  jar="$DOWNLOADS/aapt2-$version-linux.jar"
-  if [[ ! -f "$AAPT2_REAL" ]]; then
-    log "installing aapt2 $version"
-    fetch "$GOOGLE_MAVEN/com/android/tools/build/aapt2/$version/aapt2-$version-linux.jar" "$jar"
-    rm -rf -- "$AAPT2_DIR/extract"
-    mkdir -p "$AAPT2_DIR/extract"
-    unzip -q -o "$jar" aapt2 -d "$AAPT2_DIR/extract"
-    install -m 0755 "$AAPT2_DIR/extract/aapt2" "$AAPT2_REAL"
-    rm -rf -- "$AAPT2_DIR/extract"
+  # The postcondition is the derived version being installed, not a binary
+  # being present. Checking only for the file makes an AGP bump a silent no-op
+  # here, which leaves the build running the aapt2 of the AGP before it -- and
+  # a resource compiler one build number out is exactly the failure deriving
+  # the version was meant to rule out.
+  if [[ -f "$AAPT2_REAL" && "$(cat "$AAPT2_STAMP" 2>/dev/null)" == "$version" ]]; then
+    return
   fi
+
+  jar="$DOWNLOADS/aapt2-$version-linux.jar"
+  log "installing aapt2 $version"
+  fetch "$GOOGLE_MAVEN/com/android/tools/build/aapt2/$version/aapt2-$version-linux.jar" "$jar"
+  rm -rf -- "$AAPT2_DIR/extract"
+  mkdir -p "$AAPT2_DIR/extract"
+  unzip -q -o "$jar" aapt2 -d "$AAPT2_DIR/extract"
+  install -m 0755 "$AAPT2_DIR/extract/aapt2" "$AAPT2_REAL"
+  rm -rf -- "$AAPT2_DIR/extract"
+  printf '%s\n' "$version" >"$AAPT2_STAMP"
 }
 
 # One entry point at one path on every host. Only the exec line differs, which is

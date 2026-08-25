@@ -1,7 +1,11 @@
 package dev.boreaslab.boreas.engine
 
+import dev.boreaslab.boreas.model.CoreEvent
 import dev.boreaslab.boreas.model.EngineConfig
-import dev.boreaslab.boreas.model.RuleProfile
+import dev.boreaslab.boreas.model.RuleSetSize
+import dev.boreaslab.boreas.model.Endpoint
+import dev.boreaslab.boreas.model.Filtering
+import dev.boreaslab.boreas.model.Parsed
 import dev.boreaslab.boreas.model.SessionId
 import dev.boreaslab.boreas.model.TunnelDraft
 import dev.boreaslab.boreas.model.TunnelParse
@@ -54,28 +58,47 @@ class SimulatedEngineHostTest {
     fun `a session that was never started reports nothing at all`() = runTest {
         val host = SimulatedEngineHost(clock = countingClock())
 
-        assertEquals(emptyList<Any>(), host.status(SessionId("never-started")).toList())
+        assertEquals(emptyList<Any>(), host.events(SessionId("never-started")).toList())
     }
 
     @Test
     fun `a stopped session stops reporting`() = runTest {
         val host = SimulatedEngineHost(clock = countingClock())
-        val started = host.start(EngineConfig(), platform) as EngineStart.Started
+        val started = host.start(filtering(), platform) as EngineStart.Started
 
         host.stop(started.session, StopReason.UserRequested)
 
-        assertEquals(emptyList<Any>(), host.status(started.session).toList())
+        assertEquals(emptyList<Any>(), host.events(started.session).toList())
     }
 
     @Test
-    fun `the first snapshot carries the configuration the session was started with`() = runTest {
+    fun `a session that filters nothing invents no stream to filter`() = runTest {
         val host = SimulatedEngineHost(clock = countingClock())
-        val config = EngineConfig(profile = RuleProfile.Strict)
+        val started = host.start(EngineConfig(), platform) as EngineStart.Started
+
+        assertEquals(emptyList<Any>(), host.events(started.session).toList())
+    }
+
+    @Test
+    fun `the first event reports the rule set the session was started with`() = runTest {
+        val host = SimulatedEngineHost(clock = countingClock())
+        val config = filtering("||ads.example.net^")
 
         val started = host.start(config, platform) as EngineStart.Started
-        val first = host.status(started.session).first()
+        val first = host.events(started.session).first()
 
-        assertEquals(config.upstream, first.upstream)
-        assertTrue("a generated snapshot must say so", first.simulated)
+        assertEquals(CoreEvent.Reloaded(RuleSetSize(0, 1, 0)), first)
     }
+
+    @Test
+    fun `a generated stream says it is generated`() {
+        assertTrue("a host that invents numbers must say so", SimulatedEngineHost().simulated)
+    }
+
+    private fun filtering(vararg lists: String) = EngineConfig(
+        Filtering.Names(
+            upstream = (Endpoint.parse("9.9.9.9") as Parsed.Valid).value,
+            lists = lists.toList(),
+        ),
+    )
 }

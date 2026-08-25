@@ -8,12 +8,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.boreaslab.boreas.BuildConfig
+import dev.boreaslab.boreas.data.AuthoritySummary
+import dev.boreaslab.boreas.data.CertificateExport
+import dev.boreaslab.boreas.data.ExportState
 import dev.boreaslab.boreas.data.SettingsRepository
-import dev.boreaslab.boreas.model.EngineConfig
-import dev.boreaslab.boreas.model.RuleProfile
+import dev.boreaslab.boreas.model.PolicyDraft
+import dev.boreaslab.boreas.model.PolicyParse
+import dev.boreaslab.boreas.model.ResolvedName
 import dev.boreaslab.boreas.model.TunnelDraft
 import dev.boreaslab.boreas.model.TunnelParse
-import dev.boreaslab.boreas.model.UpstreamRoute
 import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.service.BoreasVpnService
 import dev.boreaslab.boreas.service.ConsentBroker
@@ -48,16 +51,22 @@ data class InstalledApp(
 class BoreasViewModel(private val app: Application) : ViewModel() {
 
     private val settings = SettingsRepository(app)
+    private val certificates = CertificateExport(app)
 
     val sessionState: StateFlow<VpnLifecycleState> = SessionStateBus.state
     val alwaysOn: StateFlow<AlwaysOn> = SessionStateBus.alwaysOn
     val transitions: StateFlow<List<TransitionRecord>> = SessionStateBus.log
-
-    val engineConfig: StateFlow<EngineConfig> =
-        settings.engineConfig.stateIn(viewModelScope, SharingStarted.Eagerly, EngineConfig())
+    val resolutions: StateFlow<List<ResolvedName>> = SessionStateBus.resolutions
 
     val certificateInstalled: StateFlow<Boolean> =
         settings.certificateInstallCompleted.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** Absent until a tunnel that intercepts has generated one. */
+    val authority: StateFlow<AuthoritySummary?>
+        field = MutableStateFlow<AuthoritySummary?>(null)
+
+    val export: StateFlow<ExportState>
+        field = MutableStateFlow<ExportState>(ExportState.Idle)
 
     val simulationEnabled: StateFlow<Boolean> =
         settings.simulationEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -77,6 +86,28 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
             draft?.let { TunnelParse.of(it, excluded) }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** The same arrangement for policy: raw text held here, parsed on the way out. */
+    val policyDraft: StateFlow<PolicyDraft?>
+        field = MutableStateFlow<PolicyDraft?>(null)
+
+    val policyParse: StateFlow<PolicyParse?> =
+        policyDraft.map { draft -> draft?.let(PolicyParse::of) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Whether what is on screen differs from what the running session is applying.
+     *
+     * Compares the parsed policy against the session's own [applied], which is the
+     * configuration that session was actually started with. Comparing against the
+     * stored draft instead would report a change the moment a character is typed.
+     */
+    val policyPending: StateFlow<Boolean> =
+        combine(sessionState, policyParse) { session, parsed ->
+            session is VpnLifecycleState.Running &&
+                parsed is PolicyParse.Valid &&
+                session.applied != parsed.config
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val installedApps: StateFlow<List<InstalledApp>?>
         field = MutableStateFlow<List<InstalledApp>?>(null)
 
@@ -94,6 +125,23 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
 
     init {
         viewModelScope.launch { tunnelDraft.value = settings.tunnelDraft.first() }
+        viewModelScope.launch { policyDraft.value = settings.policyDraft.first() }
+        viewModelScope.launch { authority.value = certificates.summary() }
+    }
+
+    /**
+     * Writes the root where the system installer can reach it.
+     *
+     * Re-reads the summary afterwards, because the first tunnel that intercepts
+     * generates the authority while this screen may already be open.
+     */
+    fun exportRootCertificate() {
+        if (export.value is ExportState.Working) return
+        viewModelScope.launch {
+            export.value = ExportState.Working
+            export.value = certificates.writeToDownloads()
+            authority.value = certificates.summary()
+        }
     }
 
     // Service coalesces repeated commands; do not add a second guard here.
@@ -109,14 +157,22 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     /** Deferred completion is non-suspending. */
     fun deliverConsent(outcome: ConsentOutcome) = ConsentBroker.deliver(outcome)
 
-    fun setProfile(profile: RuleProfile) = updateEngineConfig { it.copy(profile = profile) }
+    fun setPolicyDraft(draft: PolicyDraft) {
+        policyDraft.value = draft
+        viewModelScope.launch { settings.updatePolicyDraft { draft } }
+    }
 
-    fun setInspectTls(enabled: Boolean) = updateEngineConfig { it.copy(inspectTls = enabled) }
-
-    fun setUpstream(route: UpstreamRoute) = updateEngineConfig { it.copy(upstream = route) }
-
-    private fun updateEngineConfig(change: (EngineConfig) -> EngineConfig) {
-        viewModelScope.launch { settings.updateEngineConfig(change) }
+    /**
+     * Pushes the current policy at the running session.
+     *
+     * The service decides whether it reaches: rules do, through a reload that drops
+     * no connection, and everything else is fixed at start. Deciding here would
+     * duplicate the core's own rule in a second place.
+     */
+    fun applyPolicy() {
+        app.startService(
+            Intent(app, BoreasVpnService::class.java).setAction(BoreasVpnService.ACTION_RECONFIGURE),
+        )
     }
 
     fun setTunnelDraft(draft: TunnelDraft) {
@@ -176,5 +232,3 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
     }
 }
 
-fun VpnLifecycleState.pendingPolicyChange(saved: EngineConfig): Boolean =
-    this is VpnLifecycleState.Running && applied != saved

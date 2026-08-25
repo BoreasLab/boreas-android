@@ -2,81 +2,94 @@
 
 ## Status
 
-This is the implementation contract between this repository and `boreas-core`.
-It is not yet an exported ABI and does not authorize adding placeholder FFI
-symbols. The first native bridge must implement this contract in lockstep with a
-versioned core interface and tests on both sides.
+**The contract is `boreas-core/api/`.** It is self-contained and normative: six
+functions, two vtables, one configuration struct, and the semantics that page
+set describes. `ffi/include/boreas.h` is the same content in a form a compiler
+reads, and it ships in every release archive beside the binaries.
+
+This document holds only what belongs to *this* repository: where each
+obligation is discharged in the Kotlin tree, and which of the contract's traps
+are closed by construction here rather than by review. It states no fact about
+the core that the contract does not.
+
+If something needed to make progress is not in `api/`, that is a defect in
+`api/` and it is reported there. Reading `boreas-core/src/` or `ffi/src/` to
+work it out is not the fallback.
 
 ## Boundary
 
 ```text
-Compose UI -> Kotlin service/control shell -> native bridge -> boreas-core
-                                      |                         |
-                                      +-- Android VPN API        +-- raw IP
+Compose UI -> BoreasVpnService -> NativeEngineHost -> libboreas.so
+                    |                    |
+                    +-- Android VPN API  +-- raw IP, over two vtables
 ```
 
-The boundary transports an ordered sequence of raw IPv4 or IPv6 packets. The
-platform creates and owns Android resources; the core consumes the device and
-owns packet and network semantics.
-
-| Concern | Android shell owns | Rust core owns |
+| Concern | This repository owns | The core owns |
 |---|---|---|
-| User interaction | consent, settings, Compose state, notification actions | no UI state |
-| VPN device | `VpnService`, TUN creation, addresses, routes, OS lifecycle | reads and writes the admitted device |
-| Packet processing | descriptor transfer only | parsing, reassembly, MTU, ECN, ICMP, TCP, UDP, policy and egress |
-| Upstream bypass | call `VpnService.protect(fd)` before connect | request the bypass and fail closed when it is denied |
-| Observability | present typed status and counters | produce typed status, counters, errors and logs at effect boundaries |
+| User interaction | consent, settings, Compose state, notification actions | nothing |
+| VPN device | `VpnService`, TUN creation, addresses, routes, OS lifecycle | reads and writes it through `BoreasDevice` |
+| Packet processing | one descriptor, handed over once | parsing, reassembly, MTU, ICMP, TCP, UDP, policy, egress |
+| Socket bypass | `VpnService.protect(fd)` through `BoreasBypass` | asks, and fails the dial when refused |
+| Observability | folds the event stream into state a screen can show | the event stream, which is the whole diagnostic surface |
+| Persistence | the certificate authority's material, and nothing else | opens no file, reads no environment variable |
 
-Neither side may introduce an Android-only parser, filter, route decision, or
-packet queue. Packet work remains in the core's $O(p)$ per-packet path for a
-packet of $p$ bytes; the Android shell must not add an avoidable copy,
-classification pass, or unbounded queue.
+## Where each obligation lives
 
-## Logical Interface v1
+| Obligation | Discharged in |
+|---|---|
+| One `libboreas.so` per shipped ABI at `jniLibs/<abi>/` | `app/build.gradle.kts`, `FetchBoreasCore` |
+| The ABI comparison at startup, before anything else | `core/BoreasLibrary.kt`, `BoreasCore.load` |
+| `Builder.setMtu(n)` and `BoreasConfig.mtu` the same `n` | `PlatformConfig.mtu`, read by `BoreasVpnService.establish` and `CoreConfig` |
+| `establish()` null-checked | `Establishment.Refused` |
+| Every callback object held in a long-lived field | `core/TunDevice.kt`, `core/VpnBypass.kt` |
+| `recv` returns `0` on timeout rather than blocking | `TunDevice.recv`, `poll(2)` with a bounded interval |
+| Never `close(fd)` to unblock a read | `TunDevice.close` sets a flag; nothing closes to signal |
+| `send` errors on a short write | `TunDevice.send` |
+| Events read on a thread of their own | `NativeTunnel.reader` |
+| shutdown, join, free, then close the descriptor | `NativeTunnel.shutdown`, `TunDevice.awaitRelease` |
+| CA material kept, certificate offered to the installer | `data/KeystoreAuthorityStore.kt`, `data/CertificateExport.kt` |
 
-These are semantic operations. Names, serialization, and exported function
-signatures are deliberately deferred to the core FFI crate.
+## What is unrepresentable rather than checked
 
-| Operation | Input | Success result | Failure rule |
-|---|---|---|---|
-| `start` | validated engine configuration, platform configuration, one transferred device | running session identity and initial status | leaves no live TUN or core task |
-| `stop` | session identity and a typed reason | terminal stopped status | idempotent after the first accepted stop |
-| `configuration_changed` | validated replacement or explicit restart requirement | applied status or restart-required status | no partial silent application |
-| `network_changed` | typed Android network capability event | replan or typed degradation status | preserves cancellation and existing flow invariants |
-| `status_snapshot` | none | immutable status and bounded counters | never returns packet payloads |
-| `protect_socket` | an unconnected socket descriptor | success or typed denial | native code must not connect on denial |
+The core refuses several configurations that would run and filter nothing.
+Those are the dangerous ones, because such a tunnel reports itself healthy. The
+domain types make most of them unwritable, so nothing in this repository has to
+check for them:
 
-`EngineConfig` owns policy and egress choices. `PlatformConfig` owns Android
-addressing, routes, DNS servers, MTU, foreground-notification data, and
-per-app/always-on choices. Each configuration is parsed once at its untrusted
-entry and becomes an immutable trusted value before the service starts.
+| The core refuses | Here it is |
+|---|---|
+| filtering with no resolver | `Filtering.Names` carries the resolver |
+| interception with an empty host list | `Interception` requires a non-empty list |
+| document rewriting without interception | a field of `Interception` |
+| exactly one of certificate / keys | one `CaMaterial` holding both |
+| an intercepted host that is not a hostname | `Hostname.parse` |
+| a resolver that is not `host:port` numeric | `Endpoint.parse` |
+| an MTU below 1280 | `Mtu.parse` |
 
-## Resource and Cancellation Law
+## The two silent mistakes
 
-Startup is linear:
+Both produce a tunnel that starts, reports itself healthy, and does the wrong
+thing. Neither raises an error.
 
-```text
-validate -> obtain consent -> establish TUN -> transfer ownership -> start core
-```
+**Different MTUs on the two sides.** One field, `PlatformConfig.mtu`, is read by
+both the `VpnService.Builder` call and the config marshaller. They cannot be
+given different answers. The symptom if they ever were is a sustained
+`paths_reported`, which the activity screen surfaces without the reader needing
+to know what it means.
 
-Shutdown is the reverse:
+**An unprotected socket.** `BoreasBypass.protect` is never allowed to return
+success without having protected something: a refusal from
+`VpnService.protect` is returned as a refusal, and the core fails the dial
+rather than using the socket.
 
-```text
-cancel control work -> stop core -> await native completion -> release Android resources
-```
+## Binding route
 
-At most one start or stop transition may own the session at a time. A cancelled
-start closes every resource it acquired. The native core must finish or be
-joined before Android replaces the device, so no task can retain a descriptor
-from an obsolete VPN session.
+JNA, not a JNI shim. Kotlin cannot produce a C function pointer, so the two
+vtables need trampolines that something else builds, and the alternative needs
+the NDK.
 
-## Binding Choice
-
-Use UniFFI for Kotlin value and control models only when the matching core API
-is ready. A descriptor transfer is not an ordinary value: it requires one
-explicit native call that documents the ownership move. Generated bindings do
-not change that law.
-
-The Android bridge must expose no packet callback to Kotlin. It may expose
-typed status/events and a synchronous, cancellation-aware `protect_socket`
-callback because Android alone can discharge that OS obligation.
+One consequence is recorded in `core/VpnBypass.kt` and reported upstream:
+`boreas_android_bypass` cannot be called from JNA, because it takes a `jobject`
+and JNA's argument marshaller has no case that passes one. The bypass vtable is
+therefore filled in here, by the same mechanism the contract prescribes for the
+device vtable.

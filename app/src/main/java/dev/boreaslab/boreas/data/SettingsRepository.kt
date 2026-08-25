@@ -8,10 +8,9 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import dev.boreaslab.boreas.model.EngineConfig
-import dev.boreaslab.boreas.model.RuleProfile
+import dev.boreaslab.boreas.model.NatBehavior
+import dev.boreaslab.boreas.model.PolicyDraft
 import dev.boreaslab.boreas.model.TunnelDraft
-import dev.boreaslab.boreas.model.UpstreamRoute
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -21,9 +20,13 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore("b
 class SettingsRepository(private val context: Context) {
 
     private object Keys {
-        val profile = stringPreferencesKey("rule_profile")
-        val inspectTls = booleanPreferencesKey("inspect_tls")
-        val upstream = stringPreferencesKey("upstream")
+        val filterNames = booleanPreferencesKey("filter_names")
+        val resolver = stringPreferencesKey("resolver")
+        val rules = stringPreferencesKey("rules")
+        val intercept = booleanPreferencesKey("intercept")
+        val interceptHosts = stringPreferencesKey("intercept_hosts")
+        val rewriteDocuments = booleanPreferencesKey("rewrite_documents")
+        val nat = stringPreferencesKey("nat_behavior")
         val address = stringPreferencesKey("tunnel_address")
         val mtu = stringPreferencesKey("tunnel_mtu")
         val dns = stringPreferencesKey("tunnel_dns")
@@ -32,13 +35,29 @@ class SettingsRepository(private val context: Context) {
         val certificateInstalled = booleanPreferencesKey("certificate_install_completed")
     }
 
-    val engineConfig: Flow<EngineConfig> = context.dataStore.data.map(::decodeEngineConfig)
+    /**
+     * The raw policy, as typed.
+     *
+     * Stored as a draft rather than as a parsed [dev.boreaslab.boreas.model.EngineConfig]
+     * on purpose. Half-typed text has to survive process death, and a type whose
+     * whole point is to be unconstructible when wrong cannot hold it. Parsing
+     * happens at one boundary, and the one that starts the tunnel reads the same
+     * draft this does.
+     */
+    val policyDraft: Flow<PolicyDraft> = context.dataStore.data.map(::decodePolicyDraft)
 
-    private fun decodeEngineConfig(prefs: Preferences) = EngineConfig(
-        profile = prefs[Keys.profile].toEnum(RuleProfile.entries, RuleProfile.Standard),
-        inspectTls = prefs[Keys.inspectTls] ?: false,
-        upstream = prefs[Keys.upstream].toEnum(UpstreamRoute.entries, UpstreamRoute.Direct),
-    )
+    private fun decodePolicyDraft(prefs: Preferences): PolicyDraft {
+        val fallback = PolicyDraft()
+        return PolicyDraft(
+            filterNames = prefs[Keys.filterNames] ?: fallback.filterNames,
+            resolver = prefs[Keys.resolver] ?: fallback.resolver,
+            rules = prefs[Keys.rules] ?: fallback.rules,
+            intercept = prefs[Keys.intercept] ?: fallback.intercept,
+            interceptHosts = prefs[Keys.interceptHosts] ?: fallback.interceptHosts,
+            rewriteDocuments = prefs[Keys.rewriteDocuments] ?: fallback.rewriteDocuments,
+            nat = prefs[Keys.nat].toEnum(NatBehavior.entries, fallback.nat),
+        )
+    }
 
     val tunnelDraft: Flow<TunnelDraft> = context.dataStore.data.map { prefs ->
         val fallback = TunnelDraft()
@@ -60,12 +79,16 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.data.map { it[Keys.certificateInstalled] ?: false }
 
     /** Keeps read-modify-write inside DataStore's transaction to avoid stale overwrites. */
-    suspend fun updateEngineConfig(transform: (EngineConfig) -> EngineConfig) {
+    suspend fun updatePolicyDraft(transform: (PolicyDraft) -> PolicyDraft) {
         context.dataStore.edit { prefs ->
-            val next = transform(decodeEngineConfig(prefs))
-            prefs[Keys.profile] = next.profile.name
-            prefs[Keys.inspectTls] = next.inspectTls
-            prefs[Keys.upstream] = next.upstream.name
+            val next = transform(decodePolicyDraft(prefs))
+            prefs[Keys.filterNames] = next.filterNames
+            prefs[Keys.resolver] = next.resolver
+            prefs[Keys.rules] = next.rules
+            prefs[Keys.intercept] = next.intercept
+            prefs[Keys.interceptHosts] = next.interceptHosts
+            prefs[Keys.rewriteDocuments] = next.rewriteDocuments
+            prefs[Keys.nat] = next.nat.name
         }
     }
 

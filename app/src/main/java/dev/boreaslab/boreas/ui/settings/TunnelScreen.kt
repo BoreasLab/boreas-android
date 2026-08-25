@@ -25,6 +25,7 @@ import dev.boreaslab.boreas.model.problemFor
 import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import dev.boreaslab.boreas.ui.PreviewSurface
+import dev.boreaslab.boreas.ui.copyFor
 
 /** Tunnel inputs; raw drafts persist, validation covers all fields, and active sessions lock them. */
 @Composable
@@ -96,16 +97,6 @@ fun TunnelScreen(
             keyboardType = KeyboardType.Decimal,
         )
     }
-}
-
-@Composable
-private fun copyFor(problem: FieldProblem): String = when (problem) {
-    FieldProblem.Required -> stringResource(R.string.error_required)
-    FieldProblem.AddressShape -> stringResource(R.string.error_address_shape)
-    FieldProblem.AddressRange -> stringResource(R.string.error_address_range)
-    FieldProblem.MtuShape -> stringResource(R.string.error_mtu_shape)
-    FieldProblem.MtuRange -> stringResource(R.string.error_mtu_range)
-    is FieldProblem.DnsShape -> stringResource(R.string.error_dns_shape, problem.entry)
 }
 
 @Preview(name = "Tunnel", showBackground = true)

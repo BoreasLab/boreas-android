@@ -34,12 +34,15 @@ import dev.boreaslab.boreas.design.component.NoticeCard
 import dev.boreaslab.boreas.design.component.NoticeTone
 import dev.boreaslab.boreas.design.component.Overline
 import dev.boreaslab.boreas.design.component.SessionMetric
-import dev.boreaslab.boreas.model.EngineConfig
-import dev.boreaslab.boreas.model.RuleProfile
+import dev.boreaslab.boreas.model.Filtering
+import dev.boreaslab.boreas.model.Operation
+import dev.boreaslab.boreas.model.TypedFailure
 import dev.boreaslab.boreas.service.AlwaysOn
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import dev.boreaslab.boreas.ui.PreviewSurface
 import dev.boreaslab.boreas.ui.copyFor
+import dev.boreaslab.boreas.ui.detailText
+import dev.boreaslab.boreas.ui.formatCount
 import dev.boreaslab.boreas.ui.formatDuration
 import dev.boreaslab.boreas.ui.labelFor
 import kotlinx.coroutines.delay
@@ -47,7 +50,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun ShieldScreen(
     state: VpnLifecycleState,
-    savedConfig: EngineConfig,
+    /** The stored policy differs from what the running session is applying. */
+    policyPending: Boolean,
     alwaysOn: AlwaysOn,
     onStart: () -> Unit,
     onStop: () -> Unit,
@@ -78,14 +82,14 @@ fun ShieldScreen(
                 NoticeCard(
                     tone = NoticeTone.Danger,
                     title = stringResource(copy.title),
-                    detail = stringResource(copy.detail) + " " + stringResource(
+                    detail = copy.detailText() + " " + stringResource(
                         R.string.failed_context,
                         stringResource(labelFor(state.operation)),
                     ),
                 )
             }
 
-            if (state is VpnLifecycleState.Running && state.applied != savedConfig) {
+            if (state is VpnLifecycleState.Running && policyPending) {
                 NoticeCard(
                     tone = NoticeTone.Warning,
                     title = stringResource(R.string.policy_pending_title),
@@ -201,17 +205,13 @@ private fun RunningDetail(state: VpnLifecycleState.Running, modifier: Modifier =
             modifier = Modifier.weight(1f),
         )
         SessionMetric(
-            label = stringResource(R.string.session_profile),
-            value = when (state.applied.profile) {
-                RuleProfile.Off -> stringResource(R.string.policy_profile_off)
-                RuleProfile.Standard -> stringResource(R.string.policy_profile_standard)
-                RuleProfile.Strict -> stringResource(R.string.policy_profile_strict)
-            },
+            label = stringResource(R.string.session_tier),
+            value = stringResource(tierLabel(state.applied.filtering)),
             modifier = Modifier.weight(1f),
         )
         SessionMetric(
-            label = stringResource(R.string.session_label),
-            value = state.session.value,
+            label = stringResource(R.string.metric_names_blocked),
+            value = formatCount(state.status.namesBlocked),
             modifier = Modifier.weight(1f),
         )
     }
@@ -266,21 +266,31 @@ private fun PrimaryControl(
     }
 }
 
+/**
+ * Which tier this session is running, named by what it does rather than by a
+ * number nobody outside the contract would recognise.
+ */
+private fun tierLabel(filtering: Filtering): Int = when (filtering) {
+    Filtering.Off -> R.string.tier_off
+    is Filtering.Names ->
+        if (filtering.interception == null) R.string.tier_names else R.string.tier_requests
+}
+
 @Preview(name = "Shield: stopped", showBackground = true)
 @Composable
 private fun ShieldStoppedPreview() = PreviewSurface {
-    ShieldScreen(VpnLifecycleState.Stopped, EngineConfig(), AlwaysOn.Off, {}, {})
+    ShieldScreen(VpnLifecycleState.Stopped, policyPending = false, AlwaysOn.Off, {}, {})
 }
 
-@Preview(name = "Shield: engine not linked", showBackground = true)
+@Preview(name = "Shield: core not loaded", showBackground = true)
 @Composable
 private fun ShieldFailedPreview() = PreviewSurface {
     ShieldScreen(
         VpnLifecycleState.Failed(
-            dev.boreaslab.boreas.model.Operation.Start,
-            dev.boreaslab.boreas.model.TypedFailure.EngineUnavailable,
+            Operation.Start,
+            TypedFailure.CoreNotLoaded("library \"libc++_shared.so\" not found"),
         ),
-        EngineConfig(),
+        policyPending = false,
         AlwaysOn.On(lockdown = true),
         {},
         {},

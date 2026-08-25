@@ -141,6 +141,27 @@ private fun rememberOpenVpnSettings(): (() -> Unit)? {
     }
 }
 
+/**
+ * Opens the screen a CA certificate has to be installed from.
+ *
+ * There is no public action that lands on the CA installer itself, so this is the
+ * closest documented destination and the screen says what to do once there. See
+ * CertificateScreen for why the one-tap intent is not used.
+ */
+@Composable
+private fun rememberOpenSecuritySettings(): (() -> Unit)? {
+    val context = LocalContext.current
+    return remember(context) {
+        val intent = Intent(Settings.ACTION_SECURITY_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (intent.resolveActivity(context.packageManager) == null) {
+            null
+        } else {
+            { context.startActivity(intent) }
+        }
+    }
+}
+
 @Composable
 private fun BoreasNavGraph(
     navController: NavHostController,
@@ -148,12 +169,12 @@ private fun BoreasNavGraph(
     modifier: Modifier = Modifier,
 ) {
     val session by viewModel.sessionState.collectAsStateWithLifecycle()
-    val engineConfig by viewModel.engineConfig.collectAsStateWithLifecycle()
     val alwaysOn by viewModel.alwaysOn.collectAsStateWithLifecycle()
     val back: () -> Unit = { navController.popBackStack() }
 
     val startTunnel = rememberStartTunnel(viewModel)
     val openVpnSettings = rememberOpenVpnSettings()
+    val openSecuritySettings = rememberOpenSecuritySettings()
 
     // Clipboard writes are cancelled with this composition rather than outliving it.
     val clipboard = LocalClipboard.current
@@ -167,9 +188,10 @@ private fun BoreasNavGraph(
     ) {
         composable(TopLevel.Shield.route) {
             ScreenScaffold(title = stringResourceOf(TopLevel.Shield)) {
+                val pending by viewModel.policyPending.collectAsStateWithLifecycle()
                 ShieldScreen(
                     state = session,
-                    savedConfig = engineConfig,
+                    policyPending = pending,
                     alwaysOn = alwaysOn,
                     onStart = startTunnel,
                     onStop = viewModel::stopTunnel,
@@ -180,26 +202,27 @@ private fun BoreasNavGraph(
 
         composable(TopLevel.Activity.route) {
             ScreenScaffold(title = stringResourceOf(TopLevel.Activity)) {
-                ActivityScreen(state = session, modifier = Modifier.screenPadding())
+                val resolutions by viewModel.resolutions.collectAsStateWithLifecycle()
+                ActivityScreen(
+                    state = session,
+                    resolutions = resolutions,
+                    modifier = Modifier.screenPadding(),
+                )
             }
         }
 
         composable(TopLevel.Policy.route) {
             ScreenScaffold(title = stringResourceOf(TopLevel.Policy)) {
-                val certificateInstalled by
-                    viewModel.certificateInstalled.collectAsStateWithLifecycle()
+                val draft by viewModel.policyDraft.collectAsStateWithLifecycle()
+                val parse by viewModel.policyParse.collectAsStateWithLifecycle()
+                val pending by viewModel.policyPending.collectAsStateWithLifecycle()
                 PolicyScreen(
-                    config = engineConfig,
+                    draft = draft,
+                    parse = parse,
                     session = session,
-                    certificateInstalled = certificateInstalled,
-                    onProfile = viewModel::setProfile,
-                    onInspectTls = viewModel::setInspectTls,
-                    onUpstream = viewModel::setUpstream,
-                    onOpenCertificate = { navController.navigate(Detail.Certificate.route) },
-                    onRestart = {
-                        viewModel.stopTunnel()
-                        startTunnel()
-                    },
+                    pending = pending,
+                    onChange = viewModel::setPolicyDraft,
+                    onApply = viewModel::applyPolicy,
                     modifier = Modifier.screenPadding(),
                 )
             }
@@ -251,8 +274,15 @@ private fun BoreasNavGraph(
         composable(Detail.Certificate.route) {
             ScreenScaffold(title = stringResourceOf(Detail.Certificate), onBack = back) {
                 val installed by viewModel.certificateInstalled.collectAsStateWithLifecycle()
+                val authority by viewModel.authority.collectAsStateWithLifecycle()
+                val export by viewModel.export.collectAsStateWithLifecycle()
                 CertificateScreen(
                     installed = installed,
+                    authority = authority,
+                    export = export,
+                    onExport = viewModel::exportRootCertificate,
+                    onOpenSecuritySettings = openSecuritySettings,
+                    onInstalledChange = viewModel::setCertificateInstalled,
                     modifier = Modifier.screenPadding(),
                 )
             }

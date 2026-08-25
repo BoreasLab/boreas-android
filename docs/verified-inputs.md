@@ -8,8 +8,8 @@ replace device testing for Boreas-specific behavior.
 | Compose is Android's recommended modern native UI toolkit | [Android Developers](https://developer.android.com/develop/ui/compose): "Jetpack Compose is Android's recommended modern toolkit for building native UI." | Use Kotlin and Compose for the control surface. |
 | Android VPN services inherit from `VpnService` | [Android Developers](https://developer.android.com/develop/connectivity/vpn): "create an Android service inheriting from VpnService." | `BoreasVpnService` owns the platform VPN boundary. |
 | Android can protect a socket from the VPN | [`VpnService.protect`](https://developer.android.com/reference/android/net/VpnService#protect(int)): "Protect a socket from VPN connections." | Every native upstream socket needs the service callback before connect. |
-| `detachFd()` transfers close responsibility to native code | [`ParcelFileDescriptor.detachFd`](https://developer.android.com/reference/android/os/ParcelFileDescriptor#detachFd()): "You are now responsible for closing the fd in native." | Use a one-shot Kotlin-to-Rust ownership move. |
-| UniFFI includes Kotlin support | [Mozilla UniFFI](https://github.com/mozilla/uniffi-rs/blob/main/README.md): "UniFFI comes with support for Kotlin..." | It may generate Kotlin control/value bindings; it does not define descriptor ownership. |
+| Either descriptor route works, and the core closes neither | api/android.md#who-owns-the-file-descriptor, quoting both methods: `getFd()` leaves ownership with the `ParcelFileDescriptor`, `detachFd()` moves it to the caller's native code | `getFd()`, and the `ParcelFileDescriptor` is closed once after the device vtable's `release` has run. This makes a double close unreachable rather than forbidden. An earlier entry here read this the other way round, as Rust taking ownership through `detachFd()`, which is not what the contract says and would have left the descriptor unclosed. |
+| Closing a descriptor is not how a blocked read is unblocked | [`close(2)`, CAVEATS](https://man7.org/linux/man-pages/man2/close.2.html): "It is probably unwise to close file descriptors while they may be in use by system calls in other threads in the same process." | `TunDevice.recv` polls with a bounded timeout and answers `0`, and `close` sets a flag the next pass reads. Nothing closes anything to signal. |
 
 ## Always-On VPN
 
@@ -54,6 +54,78 @@ rather than degrades.
   resulting user-visible outcome has not been observed on a device.
 - Interaction between lockdown and the per-app exclusion list on real devices.
 
+## The Core Contract, Checked Against the Shipped Artifact
+
+Checked on 2026-08-25 against the pinned release
+`v0.1.0-dev.2026-08-25.03-35-12.ge88cbbd`, by reading the binaries rather than
+the page that describes them.
+
+| Input | Evidence | Implementation consequence |
+|---|---|---|
+| The 64-bit libraries are 16 KB aligned | `readelf -lW` reports `0x4000` for every LOAD segment in the `arm64-v8a` and `x86_64` objects | Nothing to do. The requirement is 64-bit only, so `x86`'s `0x1000` is not a finding. The linker flags api/android.md names are for a host that builds the core; this repository does not. |
+| The requirement itself | [Support 16 KB page sizes](https://developer.android.com/guide/practices/page-sizes): "all apps targeting Android 15 (API level 35) and higher must support 16 KB memory page sizes on 64-bit devices on Google Play. Starting February 1, 2027, if your app updates don't support 16 KB memory page sizes, you won't be able to release these updates." | Recorded as met by the artifact, to be re-checked whenever the pin moves. |
+| `JNI_OnLoad` is exported | present in the dynamic symbol table of every ABI | `boreas_android_bypass` would work if it could be reached; see the finding below about JNA. |
+| The archive carries **four** ABIs, not three | `armeabi-v7a/libboreas.so` is present, while api/artifacts.md says "There is no `armeabi-v7a`, deliberately" and api/android.md says "Boreas ships three" | Reported upstream. Meanwhile `boreasAbis` in `app/build.gradle.kts` names the three, and both the unpack and `abiFilters` derive from it, so the fourth cannot reach the APK. Verified against the built APK. |
+| `libboreas.so` needs `libc++_shared.so`, which the archive does not carry | `readelf -dW` reports it as `NEEDED` on all four ABIs; no such file is in the archive | **Blocks loading on a device.** Reported upstream: either the archive should ship it or the core should link the STL statically. Until then `Native.load` raises `UnsatisfiedLinkError`, which this app turns into `TypedFailure.CoreNotLoaded` and a sentence on screen rather than a crash. |
+| The shipped `boreas.h` matches the one in the checkout | `diff` reports no difference | The pinned `abiVersion` is checked against the shipped header on every fetch. |
+
+### `boreas_android_bypass` is not reachable from JNA
+
+api/android.md offers two binding routes and says both are supported, then says
+of the bypass: "You do not implement this on Android." Those two statements do
+not hold together for the JNA route.
+
+`boreas_android_bypass(void *env, void *service, BoreasBypass *out)` needs a
+`JNIEnv *` and a `jobject`. JNA supplies the first through
+`com.sun.jna.JNIEnv.CURRENT`, and has no facility for the second: its argument
+conversion handles primitives, `Pointer`, `Structure`, `Buffer`, primitive
+arrays, `String`, `WString`, `Callback`, `NativeMapped`, `PointerType`,
+`IntegerType`, and `JNIEnv`, and nothing else. Checked against JNA's own
+`native/dispatch.c`, in `get_conversion_flag` and the argument loop in
+`dispatch`, at the version this app pins.
+
+So the JNA route as described requires a `Java_...` shim in C, which requires
+the NDK, which is the cost the JNA route exists to avoid. Reported as a defect
+in that page. The bypass vtable is filled in here instead, by the same JNA
+callback mechanism the same page prescribes for the device vtable, and for the
+same reason it is sound there: JNA attaches the calling native thread to the
+JVM before invoking a callback, which is the obligation `boreas_android_bypass`
+exists to discharge.
+
+## Installing a CA Certificate
+
+Checked on 2026-08-25. api/android.md records the one-tap flow as unverified
+and asks for it to be checked. It does not work, and the platform says so.
+
+| Input | Evidence | Implementation consequence |
+|---|---|---|
+| `KeyChain.createInstallIntent()` cannot install a CA certificate from API 30 | [AOSP `KeyChain.java`](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/keystore/java/android/security/KeyChain.java), javadoc on `createInstallIntent()`: "Starting from `android.os.Build.VERSION_CODES#R`, the intent returned by this method cannot be used for installing CA certificates. Since CA certificates can only be installed via Settings, the app should provide the user with a file containing the CA certificate. One way to do this would be to use the `android.provider.MediaStore` API to write the certificate to the `MediaStore.Downloads` collection." | The certificate screen writes the DER to Downloads and sends the user to Settings, in that order, with the second step disabled until the first has produced a file. This is the documented route, not a fallback. |
+| `minSdk` 29 is the one level where the intent still works | Same javadoc: the restriction starts at R, which is API 30 | No second flow for it. One path that works everywhere beats two where one cannot be tested and both must be maintained. |
+| Whether the root is installed is not observable | Android exposes no read of the user trust store | The screen records what the user says rather than claiming to know, and says why. |
+
+### Still unverified for the certificate
+
+- Whether a given OEM's Settings accepts a `.crt` written to Downloads through
+  `MediaStore`. The MIME type is the documented one; the file picker's
+  behaviour has not been seen on hardware.
+
+## IPv6 Routing
+
+Checked on 2026-08-25 as a decision, not as a fact: this one needs a
+dual-stack device.
+
+The interface adds a default route for both families while configuring an IPv4
+address only. Leaving `::/0` out is the fail-open choice, and for a filtering
+VPN it is the worse one: on a dual-stack network every IPv6 flow would leave
+beside the tunnel, unfiltered, while the interface reported itself up. Routing
+it in is fail-closed. api/ names no IPv6 limitation, and the MTU floor of 1280
+is described as "the IPv6 minimum", so the core is expected to carry it.
+
+What has not been observed: whether Android accepts the route without a
+matching address, and what IPv6 traffic actually does once inside. Watch for
+IPv6 connectivity failing entirely, which would mean the route is accepted and
+the packets are not carried.
+
 ## Explicitly Unverified Until Device Work
 
 - Vendor and Android-version behavior of user-store CA trust and WebView.
@@ -65,6 +137,12 @@ rather than degrades.
   criterion is first relied on.
 - Background-restriction behavior for the selected target SDK.
 - Socket bypass behavior for the actual native runtime and egress transports.
+  In particular that a JNA callback is reached from a core worker thread at all,
+  which is the assumption the bypass rests on.
+- That `recv` returning zero on a poll timeout keeps the core's read loop
+  healthy rather than spinning it.
+- Teardown leaking neither the descriptor nor either callback context, which is
+  observable as `release` running before the descriptor is closed.
 - Device battery, wakeup, memory, throughput and network-transition behavior.
 
 Record each result with device, Android version, app build, test procedure, and

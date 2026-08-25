@@ -7,14 +7,18 @@ value here with the reason, not silently in a build file.
 
 | Input | Value | Why this value |
 |---|---|---|
-| Android Gradle Plugin | 9.3.1 | Latest stable. AGP 9 carries Kotlin support itself, so the separate `kotlin-android` plugin is not applied and would fail if it were. |
+| Android Gradle Plugin | 9.3.2 | Latest stable. AGP 9 carries Kotlin support itself, so the separate `kotlin-android` plugin is not applied and would fail if it were. |
 | Kotlin | 2.4.10 | Latest stable. Used for the `kotlin.plugin.compose` and `kotlin.jvm` plugins; the `:app` module compiles with AGP's built-in Kotlin. |
-| Gradle | 9.7.0 | Required by AGP 9.3. Wrapper is committed. |
+| Gradle | 9.7.1 | Required by AGP 9.3. Wrapper is committed. The wrapper jar is byte-identical to 9.7.0's, so only the distribution URL moved; `.github/scripts/gradle-wrapper.sh` checks the jar against the checksum Gradle publishes for whichever version the properties file declares. |
 | Compose BOM | 2026.08.00 | Resolves Compose UI 1.12.0 and Material 3 1.4.0. |
 | `compileSdk` | 37 | Compose 1.12 requires it. Compiling against newer APIs is separate from opting in to new runtime behavior. |
 | `targetSdk` | 36 | Held one behind deliberately. Compiling against a newer API is not the same as opting in to its runtime behavior changes, and for a VPN service those changes reach the foreground-service and background-execution rules the whole lifecycle rests on. There is no device to observe them on; raise this with a device result attached, not before. Lint's `OldTargetApi` is disabled for exactly this, named in `app/build.gradle.kts` rather than absorbed by a baseline. |
 | `minSdk` | 29 | Derived from a requirement rather than taste: `VpnService.isAlwaysOn()` and `isLockdownEnabled()` arrive at 29, and below it always-on state cannot be read at all. Raising the floor deletes a whole "cannot know" variant from the model instead of guarding it. |
 | JVM target | 17 | Both modules. |
+| Boreas core | `v0.1.0-dev.2026-08-25.03-35-12.ge88cbbd` | An exact tag, never "latest", so the build is reproducible and an ABI change is adopted rather than suffered. The pin, its digest, and the ABI version live in `gradle/boreas-core.properties`; the shipped header is the authority for the last of those and the fetch fails when the two disagree. |
+| Boreas ABI | 1 | Compared against `boreas_abi_version()` at load, before anything else, and refused on mismatch. |
+| Shipped ABIs | `arm64-v8a`, `x86_64`, `x86` | Three, from `boreasAbis` in `app/build.gradle.kts`, which drives both the unpack and `abiFilters`. There is no `armeabi-v7a`: 32-bit obliges 64-bit and never the reverse, and the platform's 16 KB page requirement exists only on arm64. The archive nevertheless carries one, so naming three is what keeps it out. |
+| JNA | 5.19.1 | The C boundary. Kotlin cannot produce a C function pointer, and the alternative shim needs the NDK. |
 | Application id | `org.joefang.boreas.android` | The installed identity, kept separate from the `namespace` `dev.boreaslab.boreas`, which stays a code-organization concern naming the Kotlin package. |
 
 ## Open
@@ -24,8 +28,10 @@ this one.
 
 | Input | Blocked on |
 |---|---|
-| ABI list | A2. There is no native library to build for, so there is nothing to choose between. |
-| Signing model | A5. No release candidate exists. |
+| Signing model | No release candidate exists. |
+| WireGuard egress | A screen that collects an endpoint and three raw keys. The ABI offers the variant; nothing here can produce one, so the domain does not model a state it could never reach. |
+| Remote filter lists | Fetching, storing, and refreshing a list by URL. Rules are typed in today, which is enough to exercise reload and to block a name. |
+| `libc++_shared.so` | The core's archive. `libboreas.so` needs it and the archive does not carry it, so the library cannot load on a device. Reported upstream; see docs/verified-inputs.md. |
 
 ## Modules
 
@@ -74,6 +80,7 @@ Each is declared in `gradle/libs.versions.toml` and used by name.
 | `androidx.navigation:navigation-compose` | Four peer destinations plus five detail routes, with saved state per destination. |
 | `androidx.datastore:datastore-preferences` | Preferences as a flow, which is what makes a persisted setting observable without a change listener written by hand. |
 | `org.jetbrains.kotlinx:kotlinx-coroutines-core` | `:domain` only. |
+| `net.java.dev.jna:jna` (aar) | The two vtables and the six functions. Its trampolines and struct layouts are built by reflection, which R8 cannot see, so `app/proguard-rules.pro` keeps both and says why. |
 
 All dependency versions were checked against their Maven metadata on 2026-08-13 and every one is at its latest stable release. Prereleases available at that date (AGP 9.4.0-alpha, Kotlin 2.4.20-RC, navigation 2.10.0-rc01, datastore 1.3.0-alpha) were not adopted.
 

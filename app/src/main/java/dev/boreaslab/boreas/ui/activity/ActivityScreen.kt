@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import dev.boreaslab.boreas.R
 import dev.boreaslab.boreas.design.BoreasIcons
@@ -23,18 +24,30 @@ import dev.boreaslab.boreas.design.component.NoticeCard
 import dev.boreaslab.boreas.design.component.NoticeTone
 import dev.boreaslab.boreas.design.component.RowDivider
 import dev.boreaslab.boreas.design.component.StateContainer
+import dev.boreaslab.boreas.model.CoreCounters
+import dev.boreaslab.boreas.model.ResolvedName
 import dev.boreaslab.boreas.model.SessionStatus
-import dev.boreaslab.boreas.model.UpstreamRoute
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import dev.boreaslab.boreas.ui.PreviewSurface
-import dev.boreaslab.boreas.ui.formatBytes
 import dev.boreaslab.boreas.ui.formatClockTime
 import dev.boreaslab.boreas.ui.formatCount
 
-/** Engine counters only; packet payloads never cross the boundary. */
+/**
+ * What the core reported, and nothing else.
+ *
+ * There are no byte or flow counters here because the ABI has none. Every number
+ * on this screen is folded from the event stream, and the stream is the whole
+ * diagnostic surface by design.
+ *
+ * The counters card is absent while everything is zero. That is not hiding a
+ * problem: a working tunnel reports zeroes, so a card of zeroes says only that
+ * nothing has gone wrong, at the cost of the space where something wrong would be
+ * noticed.
+ */
 @Composable
 fun ActivityScreen(
     state: VpnLifecycleState,
+    resolutions: List<ResolvedName>,
     modifier: Modifier = Modifier,
 ) {
     val container: ContainerState<VpnLifecycleState.Running> = when (state) {
@@ -74,63 +87,121 @@ fun ActivityScreen(
                         detail = stringResource(R.string.simulation_detail),
                     )
                 }
-                CounterGroups(running.status)
+                NamesCard(running.status)
+                if (!running.status.counters.quiet) CountersCard(running.status.counters)
+                ResolutionsCard(resolutions)
             }
         }
     }
 }
 
 @Composable
-private fun CounterGroups(status: SessionStatus, modifier: Modifier = Modifier) {
+private fun NamesCard(status: SessionStatus, modifier: Modifier = Modifier) {
     val since = stringResource(R.string.activity_since, formatClockTime(status.startedAtMillis))
 
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(Space.md),
+    CounterCard(title = stringResource(R.string.activity_group_names), footnote = since, modifier) {
+        MetricRow(
+            label = stringResource(R.string.metric_names_allowed),
+            value = formatCount(status.namesAllowed),
+        )
+        RowDivider()
+        MetricRow(
+            label = stringResource(R.string.metric_names_blocked),
+            value = formatCount(status.namesBlocked),
+            valueColor = BoreasTheme.colors.primary,
+        )
+
+        // Absent until a reload reports it, which is honest: nothing has said how
+        // many rules are in force, so nothing here claims to know.
+        status.rules?.let { rules ->
+            RowDivider()
+            MetricRow(
+                label = stringResource(R.string.metric_rules_blocked),
+                value = formatCount(rules.blocked),
+            )
+            RowDivider()
+            MetricRow(
+                label = stringResource(R.string.metric_hosts_inspected),
+                value = formatCount(rules.inspected),
+            )
+        }
+    }
+}
+
+/**
+ * Shown only when something is non-zero.
+ *
+ * Every field is something that went wrong or was refused, so any of them being
+ * visible is itself the signal, and no reader has to know which numbers are
+ * supposed to be small.
+ */
+@Composable
+private fun CountersCard(counters: CoreCounters, modifier: Modifier = Modifier) {
+    CounterCard(
+        title = stringResource(R.string.activity_group_counters),
+        footnote = stringResource(R.string.activity_counters_footnote),
+        modifier = modifier,
     ) {
-        CounterCard(title = stringResource(R.string.activity_group_flows), footnote = since) {
-            MetricRow(
-                label = stringResource(R.string.metric_flows_active),
-                value = formatCount(status.flowsActive),
+        val rows = listOf(
+            R.string.counter_datagrams_dropped to counters.datagramsDropped,
+            R.string.counter_packets_rejected to counters.packetsRejected,
+            R.string.counter_quic_steered to counters.quicSteered,
+            R.string.counter_paths_reported to counters.pathsReported,
+            R.string.counter_events_lost to counters.eventsLost,
+            R.string.counter_tasks_panicked to counters.tasksPanicked,
+        ).filter { (_, value) -> value > 0 }
+
+        rows.forEachIndexed { index, (label, value) ->
+            if (index > 0) RowDivider()
+            MetricRow(label = stringResource(label), value = formatCount(value))
+        }
+    }
+}
+
+/** The newest answered questions, which is what a "what did it block" screen is. */
+@Composable
+private fun ResolutionsCard(entries: List<ResolvedName>, modifier: Modifier = Modifier) {
+    BoreasCard(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = stringResource(R.string.activity_group_resolutions),
+            style = BoreasTheme.type.titleSm,
+            color = BoreasTheme.colors.ink,
+        )
+
+        if (entries.isEmpty()) {
+            Text(
+                text = stringResource(R.string.activity_resolutions_empty),
+                style = BoreasTheme.type.bodySm,
+                color = BoreasTheme.colors.muted,
+                modifier = Modifier.padding(top = Space.xs),
             )
-            RowDivider()
-            MetricRow(
-                label = stringResource(R.string.metric_flows_accepted),
-                value = formatCount(status.flowsAccepted),
-            )
-            RowDivider()
-            MetricRow(
-                label = stringResource(R.string.metric_flows_denied),
-                value = formatCount(status.flowsDenied),
-                valueColor = BoreasTheme.colors.primary,
-            )
+            return@BoreasCard
         }
 
-        CounterCard(title = stringResource(R.string.activity_group_transfer), footnote = since) {
+        entries.take(RESOLUTIONS_SHOWN).forEachIndexed { index, entry ->
+            if (index > 0) RowDivider()
             MetricRow(
-                label = stringResource(R.string.metric_bytes_in),
-                value = formatBytes(status.bytesIn),
-            )
-            RowDivider()
-            MetricRow(
-                label = stringResource(R.string.metric_bytes_out),
-                value = formatBytes(status.bytesOut),
-            )
-        }
-
-        CounterCard(title = stringResource(R.string.activity_group_upstream), footnote = since) {
-            MetricRow(
-                label = stringResource(R.string.metric_upstream_kind),
-                value = when (status.upstream) {
-                    UpstreamRoute.Direct -> stringResource(R.string.policy_egress_direct)
-                    UpstreamRoute.Proxy -> stringResource(R.string.policy_egress_proxy)
+                label = entry.name,
+                value = stringResource(
+                    if (entry.blocked) R.string.activity_blocked else R.string.activity_allowed,
+                ),
+                valueColor = if (entry.blocked) {
+                    BoreasTheme.colors.primary
+                } else {
+                    BoreasTheme.colors.muted
                 },
             )
-            RowDivider()
-            MetricRow(
-                label = stringResource(R.string.metric_upstream_protected),
-                value = formatCount(status.socketsProtected),
-            )
+            entry.rule?.let { rule ->
+                Text(
+                    // A rule the core had more of than the buffer held says so, so a
+                    // shortened rule is never read as the whole rule.
+                    text = if (entry.truncated) "$rule…" else rule,
+                    style = BoreasTheme.type.code,
+                    color = BoreasTheme.colors.muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -139,9 +210,10 @@ private fun CounterGroups(status: SessionStatus, modifier: Modifier = Modifier) 
 private fun CounterCard(
     title: String,
     footnote: String,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    BoreasCard(modifier = Modifier.fillMaxWidth()) {
+    BoreasCard(modifier = modifier.fillMaxWidth()) {
         Text(title, style = BoreasTheme.type.titleSm, color = BoreasTheme.colors.ink)
         Text(
             text = footnote,
@@ -153,8 +225,11 @@ private fun CounterCard(
     }
 }
 
+/** Enough to read at a glance; the controller keeps more than this. */
+private const val RESOLUTIONS_SHOWN = 25
+
 @Preview(name = "Activity: no session", showBackground = true)
 @Composable
 private fun ActivityEmptyPreview() = PreviewSurface {
-    ActivityScreen(VpnLifecycleState.Stopped)
+    ActivityScreen(VpnLifecycleState.Stopped, emptyList())
 }

@@ -15,11 +15,13 @@ public sealed interface FieldProblem {
     public data object AddressRange : FieldProblem
     public data object MtuShape : FieldProblem
     public data object MtuRange : FieldProblem
+    public data object PortRange : FieldProblem
     public data class DnsShape(val entry: String) : FieldProblem
+    public data class HostShape(val entry: String) : FieldProblem
 }
 
-/** Fields the tunnel form can report a problem against. */
-public enum class TunnelField { Address, Mtu, Dns }
+/** Fields a form can report a problem against. */
+public enum class TunnelField { Address, Mtu, Dns, Resolver, Hosts }
 
 @JvmInline
 public value class Ipv4Address private constructor(public val text: String) {
@@ -105,7 +107,16 @@ public fun TunnelParse.problemFor(field: TunnelField): FieldProblem? = when (thi
     is TunnelParse.Invalid -> problems[field]
 }
 
-/** Android tunnel addressing; route selection remains A3 work. */
+/**
+ * The interface itself: what Android is told to build, and what the core is told
+ * it was given.
+ *
+ * [mtu] is the number that must appear twice. api/obligations.md names the two
+ * silent mistakes, and this is one of them: `Builder.setMtu(n)` and the core's
+ * `mtu` must be the same `n`, or the tunnel works and spends its time answering
+ * Packet Too Big to senders that never converge. One field, read by both call
+ * sites, is what makes them agree by construction rather than by review.
+ */
 public data class PlatformConfig(
     val address: Ipv4Address,
     val mtu: Mtu,
@@ -151,12 +162,3 @@ public data class PlatformConfig(
     }
 }
 
-/** How much the engine acts on what it sees. */
-public enum class RuleProfile { Off, Standard, Strict }
-
-/** Engine policy and egress values; field set remains provisional until core FFI A2. */
-public data class EngineConfig(
-    val profile: RuleProfile = RuleProfile.Standard,
-    val inspectTls: Boolean = false,
-    val upstream: UpstreamRoute = UpstreamRoute.Direct,
-)

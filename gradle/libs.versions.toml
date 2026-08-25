@@ -1,6 +1,6 @@
 [versions]
 # A0 pinned inputs. Change these only with a recorded reason in docs/build-inputs.md.
-agp = "9.3.1"
+agp = "9.3.2"
 kotlin = "2.4.10"
 composeBom = "2026.08.00"
 activityCompose = "1.13.0"
@@ -10,7 +10,7 @@ datastore = "1.2.1"
 coreKtx = "1.19.0"
 junit = "4.13.2"
 coroutines = "1.11.0"
-jna = "5.17.0"
+jna = "5.19.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
