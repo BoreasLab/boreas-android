@@ -41,7 +41,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             RowDivider()
             MetricRow(
                 label = stringResource(R.string.about_engine),
-                value = stringResource(R.string.about_engine_absent),
+                value = BuildConfig.BOREAS_CORE_TAG,
             )
         }
 

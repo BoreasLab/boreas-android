@@ -11,6 +11,8 @@ import dev.boreaslab.boreas.BuildConfig
 import dev.boreaslab.boreas.data.AuthoritySummary
 import dev.boreaslab.boreas.data.CertificateExport
 import dev.boreaslab.boreas.data.ExportState
+import dev.boreaslab.boreas.core.BoreasCore
+import dev.boreaslab.boreas.core.EngineLoad
 import dev.boreaslab.boreas.data.SettingsRepository
 import dev.boreaslab.boreas.model.PolicyDraft
 import dev.boreaslab.boreas.model.PolicyParse
@@ -67,6 +69,10 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
 
     val export: StateFlow<ExportState>
         field = MutableStateFlow<ExportState>(ExportState.Idle)
+
+    /** Whether the shared library is usable at all, which the diagnostics screen names. */
+    val engineLoad: StateFlow<EngineLoad>
+        field = MutableStateFlow<EngineLoad>(EngineLoad.Checking)
 
     val simulationEnabled: StateFlow<Boolean> =
         settings.simulationEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -127,6 +133,7 @@ class BoreasViewModel(private val app: Application) : ViewModel() {
         viewModelScope.launch { tunnelDraft.value = settings.tunnelDraft.first() }
         viewModelScope.launch { policyDraft.value = settings.policyDraft.first() }
         viewModelScope.launch { authority.value = certificates.summary() }
+        viewModelScope.launch { engineLoad.value = BoreasCore.describe() }
     }
 
     /**

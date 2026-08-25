@@ -328,4 +328,12 @@ dependencies {
     // or the other, and that is a dependency worth deciding on rather than
     // acquiring as a side effect of wanting a first test here.
     testImplementation(libs.junit)
+
+    // The same JNA, as the desktop jar rather than the aar, so its own native
+    // library is present on a plain JVM. That is what lets the struct layouts be
+    // asserted here instead of only on a device: boreas.h pins every offset from
+    // the C side, and BoreasLayoutTest pins the same numbers from this side,
+    // against the same JNA that computes them at run time. Nothing in these tests
+    // loads libboreas.
+    testImplementation(libs.jna)
 }

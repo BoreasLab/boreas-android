@@ -3,6 +3,7 @@ package dev.boreaslab.boreas.ui.settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -30,17 +31,20 @@ import dev.boreaslab.boreas.design.component.NoticeTone
 import dev.boreaslab.boreas.design.component.RowDivider
 import dev.boreaslab.boreas.design.component.StateContainer
 import dev.boreaslab.boreas.design.component.SwitchRow
+import dev.boreaslab.boreas.core.EngineLoad
 import dev.boreaslab.boreas.service.TransitionRecord
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import dev.boreaslab.boreas.ui.PreviewSurface
 import dev.boreaslab.boreas.ui.SettingsGroup
 import dev.boreaslab.boreas.ui.copyFor
+import dev.boreaslab.boreas.ui.detailText
 import dev.boreaslab.boreas.ui.formatClockTime
 
 /** Newest-first lifecycle transitions; clearing is immediate and reversible. */
 @Composable
 fun DiagnosticsScreen(
     records: List<TransitionRecord>,
+    engineLoad: EngineLoad,
     simulationAvailable: Boolean,
     simulationEnabled: Boolean,
     onSimulationChange: (Boolean) -> Unit,
@@ -63,6 +67,8 @@ fun DiagnosticsScreen(
             style = BoreasTheme.type.bodyMd,
             color = BoreasTheme.colors.body,
         )
+
+        EngineCard(engineLoad)
 
         if (simulationAvailable) {
             SettingsGroup(title = stringResource(R.string.simulation_setting)) {
@@ -141,6 +147,37 @@ fun DiagnosticsScreen(
     }
 }
 
+/**
+ * Whether the shared library is usable, said first.
+ *
+ * It is the one fact that explains every other symptom on this screen: a tunnel
+ * that will not start because the linker refused the object looks, from the
+ * transition log alone, exactly like one that was refused for its configuration.
+ */
+@Composable
+private fun EngineCard(load: EngineLoad, modifier: Modifier = Modifier) {
+    BoreasCard(modifier = modifier.fillMaxWidth()) {
+        MetricRow(
+            label = stringResource(R.string.diagnostics_engine),
+            value = when (load) {
+                EngineLoad.Checking -> stringResource(R.string.activity_loading)
+                is EngineLoad.Linked ->
+                    stringResource(R.string.diagnostics_engine_linked, load.abiVersion)
+                is EngineLoad.Absent -> stringResource(R.string.diagnostics_engine_absent)
+            },
+        )
+        if (load is EngineLoad.Absent) {
+            val copy = copyFor(load.failure)
+            Text(
+                text = copy.detailText(),
+                style = BoreasTheme.type.bodySm,
+                color = BoreasTheme.colors.muted,
+                modifier = Modifier.padding(top = Space.xs),
+            )
+        }
+    }
+}
+
 @Composable
 private fun describe(state: VpnLifecycleState): String = when (state) {
     VpnLifecycleState.Stopped -> stringResource(R.string.state_stopped)
@@ -154,5 +191,5 @@ private fun describe(state: VpnLifecycleState): String = when (state) {
 @Preview(name = "Diagnostics: empty", showBackground = true)
 @Composable
 private fun DiagnosticsEmptyPreview() = PreviewSurface {
-    DiagnosticsScreen(emptyList(), true, false, {}, {}, {}, {})
+    DiagnosticsScreen(emptyList(), EngineLoad.Linked(abiVersion = 1), true, false, {}, {}, {}, {})
 }

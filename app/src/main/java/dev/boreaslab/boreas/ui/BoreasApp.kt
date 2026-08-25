@@ -293,8 +293,10 @@ private fun BoreasNavGraph(
             ScreenScaffold(title = stringResourceOf(Detail.Diagnostics), onBack = back) {
                 val records by viewModel.transitions.collectAsStateWithLifecycle()
                 val simulation by viewModel.simulationEnabled.collectAsStateWithLifecycle()
+                val engineLoad by viewModel.engineLoad.collectAsStateWithLifecycle()
                 DiagnosticsScreen(
                     records = records,
+                    engineLoad = engineLoad,
                     simulationAvailable = viewModel.simulationAvailable,
                     simulationEnabled = simulation,
                     onSimulationChange = viewModel::setSimulationEnabled,

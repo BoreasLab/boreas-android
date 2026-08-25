@@ -165,7 +165,6 @@
     <string name="about_title">About</string>
     <string name="about_version">Version</string>
     <string name="about_engine">Packet engine</string>
-    <string name="about_engine_absent">Not linked</string>
     <string name="about_role">Boreas keeps Android concerns in Kotlin and packet handling in a shared engine. This build contains the Kotlin half.</string>
     <string name="about_typefaces">Typefaces</string>
     <string name="about_typefaces_detail">EB Garamond, Inter, and JetBrains Mono, under the SIL Open Font License.</string>
@@ -271,4 +270,9 @@
     <!-- Field problems. -->
     <string name="error_port_range">A port is between 1 and 65535.</string>
     <string name="error_host_shape">%1$s is not a host name.</string>
+
+    <!-- Diagnostics: whether the shared library is usable at all. -->
+    <string name="diagnostics_engine">Engine</string>
+    <string name="diagnostics_engine_linked">Loaded, interface version %1$d</string>
+    <string name="diagnostics_engine_absent">Not loaded</string>
 </resources>

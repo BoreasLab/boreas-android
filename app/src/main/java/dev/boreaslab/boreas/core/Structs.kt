@@ -18,9 +18,25 @@ import com.sun.jna.Structure
  * wrong, but it also has no automatic marshalling to get it right.
  */
 
+/**
+ * A struct at this boundary, with its layout readable.
+ *
+ * The header pins every offset with a static assertion, which protects a host
+ * that compiles it. This app does not: JNA computes the layout at run time from
+ * the declarations below, and nothing would check them until a device read a
+ * field from the middle of another one. `fieldOffset` is protected in JNA, so
+ * exposing it here is what lets `BoreasLayoutTest` assert the same numbers on a
+ * plain JVM.
+ *
+ * It declares no fields of its own, so it does not appear in any layout.
+ */
+internal abstract class BoreasStruct : Structure() {
+    fun offsetOf(field: String): Int = fieldOffset(field)
+}
+
 /** `BoreasDevice`: the TUN this app supplies. Every callback runs on a core thread. */
 @Structure.FieldOrder("context", "recv", "send", "close", "release", "mtu")
-internal class BoreasDevice : Structure() {
+internal class BoreasDevice : BoreasStruct() {
 
     @JvmField var context: Pointer? = null
 
@@ -64,7 +80,7 @@ internal class BoreasDevice : Structure() {
  * re-enters the tunnel it was serving.
  */
 @Structure.FieldOrder("context", "protect", "release")
-internal class BoreasBypass : Structure() {
+internal class BoreasBypass : BoreasStruct() {
 
     @JvmField var context: Pointer? = null
 
@@ -85,7 +101,7 @@ internal class BoreasBypass : Structure() {
 
 /** `BoreasWireGuard`. Present because the struct is, not because anything fills it in. */
 @Structure.FieldOrder("endpoint", "privateKey", "peerPublicKey", "presharedKey", "hasPresharedKey")
-internal class BoreasWireGuard : Structure() {
+internal class BoreasWireGuard : BoreasStruct() {
 
     @JvmField var endpoint: Pointer? = null
 
@@ -112,7 +128,7 @@ internal class BoreasWireGuard : Structure() {
     "inspectedAddresses",
     "pendingReassemblies",
 )
-internal class BoreasCeilings : Structure() {
+internal class BoreasCeilings : BoreasStruct() {
     @JvmField var bufferSlices: SizeT = SizeT.ZERO
     @JvmField var datagramsPerFlow: SizeT = SizeT.ZERO
     @JvmField var terminatedConnections: SizeT = SizeT.ZERO
@@ -139,7 +155,7 @@ internal class BoreasCeilings : Structure() {
     "mtu",
     "ceilings",
 )
-internal class BoreasConfig : Structure() {
+internal class BoreasConfig : BoreasStruct() {
 
     /** `BOREAS_EGRESS_DIRECT` (0) or `BOREAS_EGRESS_WIREGUARD` (1). */
     @JvmField var egress: Int = EGRESS_DIRECT
@@ -186,7 +202,7 @@ internal class BoreasConfig : Structure() {
     "eventsLost",
     "tasksPanicked",
 )
-internal class BoreasCounters : Structure() {
+internal class BoreasCounters : BoreasStruct() {
     @JvmField var datagramsDropped: Long = 0
     @JvmField var packetsRejected: Long = 0
     @JvmField var quicSteered: Long = 0
@@ -213,7 +229,7 @@ internal class BoreasCounters : Structure() {
     "inspected",
     "counters",
 )
-internal class BoreasEvent : Structure() {
+internal class BoreasEvent : BoreasStruct() {
     @JvmField var kind: Int = 0
     @JvmField var blocked: Byte = 0
 

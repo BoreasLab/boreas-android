@@ -6,6 +6,8 @@ import com.sun.jna.Pointer
 import com.sun.jna.ptr.PointerByReference
 import dev.boreaslab.boreas.BuildConfig
 import dev.boreaslab.boreas.model.TypedFailure
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The six functions, plus the version check and the Android bypass builder.
@@ -68,6 +70,22 @@ internal sealed interface CoreLibrary {
 }
 
 /**
+ * What a screen may know about the load, without holding the library itself.
+ *
+ * [Checking] is a real state rather than a placeholder: resolving the load means
+ * dlopen on a 17 MB object, which does not belong on the main thread, so there is
+ * a moment before the answer exists.
+ *
+ * Public where the rest of this package is not, because it crosses into the UI
+ * and carries no handle: the library itself stays behind [CoreLibrary].
+ */
+sealed interface EngineLoad {
+    data object Checking : EngineLoad
+    data class Linked(val abiVersion: Int) : EngineLoad
+    data class Absent(val failure: TypedFailure) : EngineLoad
+}
+
+/**
  * Loads the shared object and refuses it if it is not the one this app was built
  * against.
  *
@@ -85,6 +103,26 @@ internal object BoreasCore {
     private const val LIBRARY = "boreas"
 
     val library: CoreLibrary by lazy { load() }
+
+    /**
+     * The last defect JNA caught on its way out of a callback.
+     *
+     * Every callback catches for itself, so anything that reaches the handler
+     * came from JNA's own marshalling rather than from the body. Discarding it
+     * would leave no trace of a call that returned whatever was in the return
+     * register, so it is kept for the diagnostics screen.
+     */
+    @Volatile
+    var lastCallbackDefect: Throwable? = null
+        private set
+
+    /** Resolves the load off the caller's thread and reports it without the handle. */
+    suspend fun describe(): EngineLoad = withContext(Dispatchers.IO) {
+        when (val resolved = library) {
+            is CoreLibrary.Linked -> EngineLoad.Linked(BuildConfig.BOREAS_ABI_VERSION)
+            is CoreLibrary.Absent -> EngineLoad.Absent(resolved.failure)
+        }
+    }
 
     private fun load(): CoreLibrary {
         val loaded = try {
@@ -114,7 +152,7 @@ internal object BoreasCore {
         // register. Every callback below also catches for itself; this is the net
         // under that, and it is why nothing here can turn a Kotlin bug into a
         // packet written from uninitialised memory.
-        Native.setCallbackExceptionHandler { _, _ -> }
+        Native.setCallbackExceptionHandler { _, error -> lastCallbackDefect = error }
 
         return CoreLibrary.Linked(loaded)
     }
