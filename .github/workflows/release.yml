@@ -1,0 +1,258 @@
+# Two triggers, two kinds of tag, one pipeline.
+#
+# A push to `main` cuts a **pre-release**: `:resolve` names it after the patch
+# that has not happened yet, stamped with the time and the commit, and GitHub
+# marks it pre-release so it never becomes "Latest".
+#
+# A `v*` tag pushed by hand cuts a **release**. That is the only thing a person
+# does here, and it is the whole act: the tag is the version. Nothing has to be
+# bumped first, so there is no step to forget and no gate that fires when you
+# forget it. If the next release should be a minor, tag a minor.
+#
+# The identity is decided ONCE, by `resolve`, and travels as job outputs. No
+# later job works it out again: the tag carries a timestamp, so two jobs reading
+# their own clocks would tag the release one way and stamp the binary another.
+#
+# PLAY TRACK MAPPING. There is no Play publishing step in this workflow and a
+# pre-release must never acquire one. When it lands, the mapping is: a
+# pre-release publishes to `internal` and nothing else, and only the `release`
+# variant of this pipeline -- the branch a tag push takes -- may name `production`.
+# That is enforceable here because the two are one sum: `prerelease` is a
+# projection of which tag was resolved, not a flag a step can set.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+# No ambient capability. Each job asks for exactly the effects it performs.
+permissions: {}
+
+# Releases queue rather than cancel. A cancelled release leaves a tag with no
+# assets behind it, which is the one state a consumer cannot recover from.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# NO DEPENDENCY CACHE IN THIS WORKFLOW, and that is deliberate rather than an
+# omission. `actions/cache` restores across refs: an entry written by a run on
+# any branch is offered to a run on a tag, and a Gradle cache holds executable
+# jars and compiled build logic. Restoring one here would let a branch nobody
+# reviewed decide part of what a published artefact is built from, which is the
+# supply-chain edge this pipeline's attestation exists to close. ci.yml caches
+# freely; its outputs are for inspection and are not published.
+#
+# The cost is a cold dependency download per release, which is minutes on an
+# event that happens on purpose.
+
+jobs:
+  # What is being published, decided once so every job below agrees.
+  resolve:
+    name: Name the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.identity.outputs.tag }}
+      version: ${{ steps.identity.outputs.version }}
+      versionName: ${{ steps.identity.outputs.versionName }}
+      versionCode: ${{ steps.identity.outputs.versionCode }}
+      prerelease: ${{ steps.identity.outputs.prerelease }}
+      provenance: ${{ steps.identity.outputs.provenance }}
+    steps:
+      # fetch-depth: 0 because the algebra reads every release tag to find the
+      # newest and counts commits from it. A shallow clone carries neither, and
+      # the base version would fall back to 0.0.1 on every build forever.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          submodules: false
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify the Gradle wrapper
+        shell: bash
+        run: ./.github/scripts/gradle-wrapper.sh
+
+      # Configuring :app needs the SDK, and configuring every project is what
+      # asking for one task costs. Cached, so it is a restore rather than a
+      # download on all but the first run.
+      - name: Install the Android SDK packages this build compiles against
+        shell: bash
+        run: ./.github/scripts/android-sdk.sh 'platforms;android-37.0' 'build-tools;37.0.0'
+
+      # **No branch here, and that is the point.** `resolve` reads the event from
+      # GITHUB_REF_TYPE, which GitHub already sets, and eliminates a two-variant
+      # sum; a release event with no tag is not a state it can be asked about.
+      # The only refusal is at the parser, where an untrusted ref name becomes a
+      # version or does not.
+      - name: Decide the tag
+        id: identity
+        shell: bash
+        run: ./.github/scripts/resolve-identity.sh
+
+  # The gate, on every release including pre-releases.
+  #
+  # ci.yml runs on the same push, but the two are independent workflows racing
+  # each other: without this, a red main would publish an artefact the device
+  # testers would install before anyone noticed. Calling it rather than copying
+  # its steps means there is one definition of "green" and it cannot drift.
+  gate:
+    name: Full check suite
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  build:
+    name: Build the artefacts
+    needs: [resolve, gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify the Gradle wrapper
+        shell: bash
+        run: ./.github/scripts/gradle-wrapper.sh
+
+      - name: Install the Android SDK packages this build compiles against
+        shell: bash
+        run: ./.github/scripts/android-sdk.sh 'platforms;android-37.0' 'build-tools;37.0.0'
+
+      # A digest only proves the file matches a list that came from the same
+      # place the file did. This proves which workflow built it, from which
+      # commit, before anything unpacks it.
+      - name: Verify the pinned Boreas core
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./.github/scripts/boreas-core.sh
+
+      # Absent secrets produce unsigned artefacts rather than a failure, and the
+      # asset names say which happened, so a tester is never handed an APK that
+      # looks installable and is not.
+      - name: Unseal the signing key
+        id: signing
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.BOREAS_KEYSTORE_BASE64 }}
+        run: ./.github/scripts/signing-key.sh
+
+      # The name and the number come from `resolve`. This job computes neither.
+      - name: Assemble
+        shell: bash
+        env:
+          VERSION_NAME: ${{ needs.resolve.outputs.versionName }}
+          VERSION_CODE: ${{ needs.resolve.outputs.versionCode }}
+          PROVENANCE: ${{ needs.resolve.outputs.provenance }}
+          BOREAS_KEYSTORE: ${{ steps.signing.outputs.keystore }}
+          BOREAS_KEYSTORE_PASSWORD: ${{ secrets.BOREAS_KEYSTORE_PASSWORD }}
+          BOREAS_KEY_ALIAS: ${{ secrets.BOREAS_KEY_ALIAS }}
+          BOREAS_KEY_PASSWORD: ${{ secrets.BOREAS_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon :app:bundleRelease :app:assembleRelease \
+            -Pboreas.versionName="$VERSION_NAME" \
+            -Pboreas.versionCode="$VERSION_CODE" \
+            -Pboreas.provenance="$PROVENANCE"
+
+      - name: Stage
+        shell: bash
+        env:
+          VERSION_NAME: ${{ needs.resolve.outputs.versionName }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
+        run: ./.github/scripts/stage-artefacts.sh
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-artefacts
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Attest and publish
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # Creating the tag and the release.
+      contents: write
+      # Signing the provenance: id-token mints the OIDC token Sigstore issues a
+      # short-lived certificate against, attestations persists the result, and
+      # artifact-metadata creates the storage record it hangs from.
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-artefacts
+          path: dist
+
+      # Over the assets themselves, which is what a consumer downloads. Any
+      # holder can then ask `gh attestation verify` which workflow built this
+      # file from which commit, without trusting the release page.
+      - uses: actions/attest@v4
+        with:
+          subject-path: 'dist/boreas-*'
+
+      - name: Checksum every asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum ./* > SHA256SUMS
+          cat SHA256SUMS
+
+      # One (app version, core version) pair, written where a bug report can
+      # quote it. The same pair is in the app's About screen.
+      - name: Compose the release notes
+        shell: bash
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          VERSION_NAME: ${{ needs.resolve.outputs.versionName }}
+          PROVENANCE: ${{ needs.resolve.outputs.provenance }}
+          PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
+        run: ./.github/scripts/release-notes.sh > notes.md
+
+      # `gh release create` makes the tag as well, so a pre-release needs no
+      # separate push, and the tag can only ever name the commit that produced
+      # the assets attached to it.
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          PRERELEASE: ${{ needs.resolve.outputs.prerelease }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          flags=(--target "$SHA" --notes-file notes.md --title "$TAG")
+          if [ "$PRERELEASE" = "true" ]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG" "${flags[@]}" dist/*

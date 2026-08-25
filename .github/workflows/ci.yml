@@ -37,13 +37,21 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  # Called by release.yml, which must not trust this workflow to have finished
+  # on its own: the two are independent workflows racing on the same push, and a
+  # red main must not publish. Calling rather than copying keeps one definition
+  # of "green" that cannot drift from the one a pull request sees.
+  workflow_call:
 
 # No ambient capability. Each job asks for exactly what it needs, and none of
 # them needs more than read.
 permissions: {}
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # `github.workflow` is the *calling* workflow's name, so a run invoked by
+  # release.yml lands in its own group. Sharing one would make the release gate
+  # queue behind the CI run of the very push it is gating.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   # Only the newest run of a branch under review is interesting; a push to the
   # default branch is a record and is allowed to finish.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -121,6 +129,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./.github/scripts/boreas-core.sh
+
+      # The release tag algebra and the versionCode packing, whose laws are the
+      # reason none of either lives in a workflow file. An included build, so it
+      # is asked for by directory rather than by task path.
+      - name: Test the version algebra
+        shell: bash
+        run: ./gradlew --no-daemon -p build-logic test
 
       - name: Test
         shell: bash
