@@ -47,6 +47,54 @@ the JDK, SDK, Gradle, Kotlin artifacts, caches, and temporary HOME under `/tmp`.
 - Raw packets flow only through the TUN descriptor and the native engine. The
   UI sees status, counters, and typed errors only.
 
+## Comments
+
+**A comment earns its place only by saying something the code cannot say about
+itself.** Code already states what it does. Four things it cannot state, and
+they are the only reasons to write one:
+
+1. Why this, and not the obvious alternative a reader would otherwise try.
+2. An invariant the types do not enforce.
+3. What breaks if you change this: platform behaviour, OEM deviation, lifecycle
+   ordering.
+4. A reference out: an API level, an AOSP issue, a vendor bug, a path.
+
+Everything else restates the code. Do not write it, and delete it when you find
+it: no comment that narrates the line below it, no KDoc that spells out the
+signature, no history of what the file used to be. Git holds the history, and a
+file that carries its own changelog grows one forever. A comment repeated a few
+lines later, once on the `try` and again on the `catch`, is one comment.
+
+On Android the third reason carries most of the value. A note that a vendor
+image throws where the documentation says it returns exists nowhere else. Those
+are the comments to protect and the ones to write.
+
+**Write plain technical English, not essay prose.** This guide is written in a
+register that suits a guide: an aphorism, a contrast, a claim landed on a short
+sentence. **Comments do not get that register**, and imitating it here is the
+most common way this rule is broken. No "X is the Y of Z", no "the real question
+is", no fact trailed by a participial flourish ("..., reflecting the fail-closed
+posture"). Name the mechanism and stop. Prefer a colon or a full stop to a dash,
+and keep at most one dash in a block.
+
+**Economy, not telegraphese.** Cut "in order to", "it is important to note
+that", "has the ability to", stacked hedges, and any sentence announcing the one
+after it. Keep articles and whole sentences: a comment is prose a human reads,
+and `// Vendor throws. Return Unavailable.` is not an improvement on the
+sentence it replaced.
+
+**Never delete, and edit only with the change it describes:**
+
+- Any note recording OEM or vendor deviation from documented behaviour.
+- Any note naming an API level, a permission, or a manifest requirement.
+- The justification on a `@Suppress`.
+- `TODO`, `FIXME`, `HACK`, and anything carrying an issue ID.
+- A stated limit that hardware has not yet confirmed. "This needs a dual-stack
+  device to confirm" is an open question, not hedging.
+- The text inside a KDoc `[Reference]`. It resolves to a declaration, and
+  `allWarningsAsErrors` turns a wrong one into a failed build. Deleting the
+  whole sentence is fine.
+
 ## Change Process
 
 1. Read the owning Android document and the linked core document.
@@ -54,8 +102,18 @@ the JDK, SDK, Gradle, Kotlin artifacts, caches, and temporary HOME under `/tmp`.
    could falsify it.
 3. Keep framework effects in Kotlin adapters and pure decisions in the core.
 4. Add tests with each state transition or ownership boundary.
-5. Run the narrowest relevant Gradle checks after the project exists, then run
-   the documented full Android gate before merging.
+5. Run the narrowest relevant Gradle check first, then the full gate below
+   before merging.
 
-For the present documentation-only repository, run `git diff --check` after
-edits. Do not add a Gradle project merely to make an empty check pass.
+The Gradle project exists; this repository is no longer documentation-only. The
+gate is what `.github/workflows/ci.yml` runs, and a comment-only change must
+clear it too, because `allWarningsAsErrors` is on for `:domain`, `:app`, and
+`build-logic`, and a broken KDoc reference fails the build:
+
+```sh
+./gradlew --no-daemon -p build-logic test
+./gradlew --no-daemon :domain:test :app:testDebugUnitTest
+./gradlew --no-daemon :app:assembleDebug :app:assembleRelease
+./gradlew --no-daemon :app:lintDebug :domain:lint
+git diff --check
+```
