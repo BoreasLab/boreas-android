@@ -112,11 +112,13 @@ abstract class FetchBoreasCore : DefaultTask() {
         // Named one by one rather than copied wholesale: the set of ABIs shipped is
         // a decision, and a fourth appearing in the archive must not silently ship.
         for (abi in abis.get()) {
-            val library = staging.resolve("jniLibs/$abi/libboreas.so")
-            if (!library.isFile) {
-                throw GradleException("${archive.get()} carries no jniLibs/$abi/libboreas.so")
+            for (name in NATIVE_LIBRARIES) {
+                val library = staging.resolve("jniLibs/$abi/$name")
+                if (!library.isFile) {
+                    throw GradleException("${archive.get()} carries no jniLibs/$abi/$name")
+                }
+                library.copyTo(out.resolve("jniLibs/$abi/$name"), overwrite = true)
             }
-            library.copyTo(out.resolve("jniLibs/$abi/libboreas.so"), overwrite = true)
         }
 
         val header = staging.resolve("include/boreas.h")
@@ -155,6 +157,15 @@ abstract class FetchBoreasCore : DefaultTask() {
             }
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private companion object {
+        /**
+         * `libboreas.so` records `libc++_shared.so` as a `NEEDED` entry. The linker
+         * that resolves it runs on the device, so a missing one is a `dlopen` failure
+         * after shipping rather than a build error here. Hence the assertion.
+         */
+        val NATIVE_LIBRARIES = listOf("libboreas.so", "libc++_shared.so")
     }
 }
 

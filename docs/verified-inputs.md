@@ -56,8 +56,8 @@ rather than degrades.
 
 ## The Core Contract, Checked Against the Shipped Artifact
 
-Checked on 2026-08-25 against the pinned release
-`v0.1.0-dev.2026-08-25.03-35-12.ge88cbbd`, by reading the binaries rather than
+Checked on 2026-08-30 against the pinned release
+`v0.0.1-dev.2026-08-30.18-00-50.g98e3f4b`, by reading the binaries rather than
 the page that describes them.
 
 | Input | Evidence | Implementation consequence |
@@ -65,8 +65,8 @@ the page that describes them.
 | The 64-bit libraries are 16 KB aligned | `readelf -lW` reports `0x4000` for every LOAD segment in the `arm64-v8a` and `x86_64` objects | Nothing to do. The requirement is 64-bit only, so `x86`'s `0x1000` is not a finding. The linker flags api/android.md names are for a host that builds the core; this repository does not. |
 | The requirement itself | [Support 16 KB page sizes](https://developer.android.com/guide/practices/page-sizes): "all apps targeting Android 15 (API level 35) and higher must support 16 KB memory page sizes on 64-bit devices on Google Play. Starting February 1, 2027, if your app updates don't support 16 KB memory page sizes, you won't be able to release these updates." | Recorded as met by the artifact, to be re-checked whenever the pin moves. |
 | `JNI_OnLoad` is exported | present in the dynamic symbol table of every ABI | `boreas_android_bypass` would work if it could be reached; see the finding below about JNA. |
-| The archive carries **four** ABIs, not three | `armeabi-v7a/libboreas.so` is present, while api/artifacts.md says "There is no `armeabi-v7a`, deliberately" and api/android.md says "Boreas ships three" | Reported upstream. Meanwhile `boreasAbis` in `app/build.gradle.kts` names the three, and both the unpack and `abiFilters` derive from it, so the fourth cannot reach the APK. Verified against the built APK. |
-| `libboreas.so` needs `libc++_shared.so`, which the archive does not carry | `readelf -dW` reports it as `NEEDED` on all four ABIs; no such file is in the archive | **Blocks loading on a device.** Reported upstream: either the archive should ship it or the core should link the STL statically. Until then `Native.load` raises `UnsatisfiedLinkError`, which this app turns into `TypedFailure.CoreNotLoaded` and a sentence on screen rather than a crash. |
+| The archive carries three ABIs | `tar tzf` lists `arm64-v8a`, `x86_64`, `x86` and no `armeabi-v7a` | Was four until this pin. `boreasAbis` names the three, and both the unpack and `abiFilters` derive from it, so a fourth could not reach the APK either way. |
+| `libc++_shared.so` ships beside `libboreas.so` | `readelf -dW` reports it `NEEDED` on all three ABIs, and `tar tzf` lists it in all three directories. It and the platform libraries are the whole `NEEDED` set | Fixed upstream in this pin. `FetchBoreasCore` copies both names and fails on either missing, so a regression stops the build instead of reaching a device. |
 | The shipped `boreas.h` matches the one in the checkout | `diff` reports no difference | The pinned `abiVersion` is checked against the shipped header on every fetch. |
 
 ### `boreas_android_bypass` is not reachable from JNA

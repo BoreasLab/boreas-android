@@ -102,7 +102,7 @@ the rest names what to watch for on the first device.
 
 | Item | Status |
 |---|---|
-| One `libboreas.so` per shipped ABI at `jniLibs/<abi>/` | Met. Verified against the built APK: three ABIs, no `armeabi-v7a`. |
+| One `libboreas.so` per shipped ABI at `jniLibs/<abi>/`, `libc++_shared.so` beside it | Met. Verified against the built APK: three ABIs, no `armeabi-v7a`, both libraries in each. |
 | Built with NDK r28+, or with the 16 KB linker flags | Met by the artifact. Every LOAD segment on both 64-bit ABIs is `0x4000` aligned. |
 | `minSdk >= 23`, `useLegacyPackaging` unset | Met. `minSdk` is 29 and the DSL option is absent, so `.so` files stay uncompressed and page aligned. |
 | `Builder.setMtu(n)` and `BoreasConfig.mtu = n`, the same `n` | Met by construction. One field is read by both call sites. |

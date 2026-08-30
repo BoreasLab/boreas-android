@@ -15,9 +15,9 @@ value here with the reason, not silently in a build file.
 | `targetSdk` | 36 | Held one behind deliberately. Compiling against a newer API is not the same as opting in to its runtime behavior changes, and for a VPN service those changes reach the foreground-service and background-execution rules the whole lifecycle rests on. There is no device to observe them on; raise this with a device result attached, not before. Lint's `OldTargetApi` is disabled for exactly this, named in `app/build.gradle.kts` rather than absorbed by a baseline. |
 | `minSdk` | 29 | Derived from a requirement rather than taste: `VpnService.isAlwaysOn()` and `isLockdownEnabled()` arrive at 29, and below it always-on state cannot be read at all. Raising the floor deletes a whole "cannot know" variant from the model instead of guarding it. |
 | JVM target | 17 | Both modules. |
-| Boreas core | `v0.1.0-dev.2026-08-25.03-35-12.ge88cbbd` | An exact tag, never "latest", so the build is reproducible and an ABI change is adopted rather than suffered. The pin, its digest, and the ABI version live in `gradle/boreas-core.properties`; the shipped header is the authority for the last of those and the fetch fails when the two disagree. |
+| Boreas core | `v0.0.1-dev.2026-08-30.18-00-50.g98e3f4b` | An exact tag, never "latest", so the build is reproducible and an ABI change is adopted rather than suffered. The pin, its digest, and the ABI version live in `gradle/boreas-core.properties`; the shipped header is the authority for the last of those and the fetch fails when the two disagree. |
 | Boreas ABI | 1 | Compared against `boreas_abi_version()` at load, before anything else, and refused on mismatch. |
-| Shipped ABIs | `arm64-v8a`, `x86_64`, `x86` | Three, from `boreasAbis` in `app/build.gradle.kts`, which drives both the unpack and `abiFilters`. There is no `armeabi-v7a`: 32-bit obliges 64-bit and never the reverse, and the platform's 16 KB page requirement exists only on arm64. The archive nevertheless carries one, so naming three is what keeps it out. |
+| Shipped ABIs | `arm64-v8a`, `x86_64`, `x86` | Three, from `boreasAbis` in `app/build.gradle.kts`, which drives both the unpack and `abiFilters`. There is no `armeabi-v7a`: 32-bit obliges 64-bit and never the reverse, and the platform's 16 KB page requirement exists only on arm64. The archive carried a fourth until `v0.0.1-dev.2026-08-30.18-00-50.g98e3f4b`; naming three here is what kept it out of the APK. |
 | JNA | 5.19.1 | The C boundary. Kotlin cannot produce a C function pointer, and the alternative shim needs the NDK. |
 | Application id | `org.joefang.boreas.android` | The installed identity, kept separate from the `namespace` `dev.boreaslab.boreas`, which stays a code-organization concern naming the Kotlin package. |
 
@@ -31,7 +31,6 @@ this one.
 | Signing keys | The pipeline reads four repository secrets and names its assets `-unsigned` when they are absent. Nobody has set them, so today's releases are unsigned. See docs/release.md. |
 | WireGuard egress | A screen that collects an endpoint and three raw keys. The ABI offers the variant; nothing here can produce one, so the domain does not model a state it could never reach. |
 | Remote filter lists | Fetching, storing, and refreshing a list by URL. Rules are typed in today, which is enough to exercise reload and to block a name. |
-| `libc++_shared.so` | The core's archive. `libboreas.so` needs it and the archive does not carry it, so the library cannot load on a device. Reported upstream; see docs/verified-inputs.md. |
 
 ## Modules
 

@@ -37,7 +37,7 @@ Compose UI -> BoreasVpnService -> NativeEngineHost -> libboreas.so
 
 | Obligation | Discharged in |
 |---|---|
-| One `libboreas.so` per shipped ABI at `jniLibs/<abi>/` | `app/build.gradle.kts`, `FetchBoreasCore` |
+| One `libboreas.so` per shipped ABI at `jniLibs/<abi>/`, `libc++_shared.so` beside it | `app/build.gradle.kts`, `FetchBoreasCore` |
 | The ABI comparison at startup, before anything else | `core/BoreasLibrary.kt`, `BoreasCore.load` |
 | `Builder.setMtu(n)` and `BoreasConfig.mtu` the same `n` | `PlatformConfig.mtu`, read by `BoreasVpnService.establish` and `CoreConfig` |
 | `establish()` null-checked | `Establishment.Refused` |
