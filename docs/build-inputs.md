@@ -7,7 +7,7 @@ value here with the reason, not silently in a build file.
 
 | Input | Value | Why this value |
 |---|---|---|
-| Android Gradle Plugin | 9.3.2 | Latest stable. AGP 9 carries Kotlin support itself, so the separate `kotlin-android` plugin is not applied and would fail if it were. |
+| Android Gradle Plugin | 9.4.0 | Latest stable. AGP 9 carries Kotlin support itself, so the separate `kotlin-android` plugin is not applied and would fail if it were. |
 | Kotlin | 2.4.10 | Latest stable. Used for the `kotlin.plugin.compose` and `kotlin.jvm` plugins; the `:app` module compiles with AGP's built-in Kotlin. |
 | Gradle | 9.7.1 | Required by AGP 9.3. Wrapper is committed. The wrapper jar is byte-identical to 9.7.0's, so only the distribution URL moved; `.github/scripts/gradle-wrapper.sh` checks the jar against the checksum Gradle publishes for whichever version the properties file declares. |
 | Compose BOM | 2026.08.00 | Resolves Compose UI 1.12.0 and Material 3 1.4.0. |
