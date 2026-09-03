@@ -8,8 +8,8 @@ Compose activity
       v
 BoreasVpnService -- VpnService.Builder --> ParcelFileDescriptor
       |                                           |
-      | protect(unconnected egress fd)            | read and written through
-      v                                           v  BoreasDevice, never owned
+      | protect(unconnected egress fd)            | detachFd(): handed over,
+      v                                           v  owned by the core
 Android framework <----------------------------- libboreas.so
 ```
 
@@ -38,31 +38,24 @@ the service scope and is never caught as an ordinary failure.
 
 ## Descriptor Ownership
 
-The descriptor is an affine resource, and this app owns it from end to end. The
-core never closes a descriptor it was given; api/android.md offers `getFd()` and
-`detachFd()` and asks only that it be closed exactly once, after `release`.
-
-`getFd()` is the one used, because it makes the rule structural rather than
-remembered: the `ParcelFileDescriptor` keeps ownership and closes through its own
-API, so there is no raw integer for a second owner to acquire.
+The descriptor is an affine resource with one owner at a time. This app holds
+it from `establish()` to `boreas_tunnel_start_fd`, then the core holds it until
+`free` closes it — on a refused start too. `detachFd()` is what makes the
+handover structural: after it the `ParcelFileDescriptor` is inert, so there is
+no second owner to close it twice.
 
 1. `BoreasVpnService.establish` validates nothing and receives everything already
    validated: it turns one `PlatformConfig` into one `ParcelFileDescriptor`, or
    into `Establishment.Refused` when `establish()` answers null, which is a
    documented path rather than a theoretical one.
-2. `TunDevice` wraps it. `recv` and `send` go through `Os.poll` and `Os.read` /
-   `Os.write` on the descriptor the `ParcelFileDescriptor` still owns, with the
-   core's own buffer wrapped as a direct `ByteBuffer`, so a packet is not copied
-   on the way past.
-3. Nothing closes the descriptor to signal anything. `close` sets a flag that the
-   next poll pass reads, within one bounded interval.
-4. `release` counts a latch down. It can run after `boreas_tunnel_free` has
-   returned, if a `recv` was still in flight when the tunnel stopped, so teardown
-   waits on the latch rather than on `free`.
-5. Only then does `dispose()` close the `ParcelFileDescriptor`, once.
+2. `NativeTunnel.start` detaches the number and passes it with the MTU. No
+   device callbacks exist: the core reads and writes the descriptor on its own
+   reactor, one syscall per packet, and nothing crosses JNA on the packet path.
+3. Nothing here closes the descriptor, to signal anything or otherwise.
+4. `boreas_tunnel_free` closes it, after the core's reactor has stopped reading.
 
-A start the core refuses still runs both `release` callbacks, so the refusal path
-closes the descriptor in the same place the success path does.
+A start the core refuses still closes the descriptor and still runs the bypass
+`release`, so the refusal path leaves nothing for this app to clean up.
 
 ## Egress Bypass
 
@@ -107,9 +100,9 @@ the rest names what to watch for on the first device.
 | `minSdk >= 23`, `useLegacyPackaging` unset | Met. `minSdk` is 29 and the DSL option is absent, so `.so` files stay uncompressed and page aligned. |
 | `Builder.setMtu(n)` and `BoreasConfig.mtu = n`, the same `n` | Met by construction. One field is read by both call sites. |
 | `establish()` null-checked | Met. It is a variant, not an exception. |
-| Every JNA callback object held in a long-lived field | Met. Fields of `TunDevice` and `VpnBypass`, both held by the tunnel. |
-| `recv` returns `0` on timeout, never relies on `close(fd)` | Met. `poll(2)` with a 100 ms bound; `close` sets a flag. |
-| `send` errors on a short write | Met. |
+| Every JNA callback object held in a long-lived field | Met. `VpnBypass`, held by the tunnel; the device has no callbacks. |
+| `recv` returns `0` on timeout, never relies on `close(fd)` | Not this app's: `boreas_tunnel_start_fd` owns the read. |
+| `send` errors on a short write | Not this app's, for the same reason. |
 | Bypass built with `boreas_android_bypass` | **Not met, and cannot be.** See above. |
 | Events read on a thread of their own | Met. One dedicated daemon thread, one collector. |
 | Teardown is shutdown, join, free, then the fd | Met in code. Not yet observed. |

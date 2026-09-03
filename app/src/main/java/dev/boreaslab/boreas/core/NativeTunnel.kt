@@ -1,5 +1,6 @@
 package dev.boreaslab.boreas.core
 
+import android.os.ParcelFileDescriptor
 import com.sun.jna.Memory
 import com.sun.jna.Pointer
 import com.sun.jna.ptr.PointerByReference
@@ -24,13 +25,11 @@ internal sealed interface TunnelStart {
 /**
  * Running tunnel and resources whose lifetimes are tied to it. A thread blocked
  * in `next_event` borrows the handle, so [shutdown] joins it before freeing the
- * handle. The descriptor closes after the device's `release` callback because a
- * `recv` already in flight can outlive its abandoned task.
+ * handle. The descriptor is the core's from `start` on; `free` closes it.
  */
 internal class NativeTunnel private constructor(
     private val library: BoreasLibrary,
     private val handle: Pointer,
-    private val device: TunDevice,
     private val bypass: VpnBypass,
 ) {
 
@@ -112,7 +111,7 @@ internal class NativeTunnel private constructor(
         }
     }
 
-    /** Stops, joins, frees, then disposes the descriptor. Idempotent and blocking. */
+    /** Stops, joins, then frees, which closes the descriptor. Idempotent and blocking. */
     fun shutdown() {
         if (!stopped.compareAndSet(false, true)) return
 
@@ -132,14 +131,10 @@ internal class NativeTunnel private constructor(
         }
 
         library.boreas_tunnel_free(handle)
-
-        // The descriptor must outlive the device's release callback.
-        device.awaitRelease()
-        device.dispose()
     }
 
     /** Callback defects captured instead of unwinding into C. */
-    fun defects(): List<Throwable> = listOfNotNull(device.lastDefect, bypass.lastDefect)
+    fun defects(): List<Throwable> = listOfNotNull(bypass.lastDefect)
 
     /** Reads events on a dedicated thread; an idle tunnel may emit nothing for hours. */
     private fun readEvents() {
@@ -214,23 +209,25 @@ internal class NativeTunnel private constructor(
         private const val READER_JOIN_MS = 5_000L
 
         /**
-         * Builds and starts the tunnel. Blocks through lookup and handshake, so
-         * callers must keep it off the main thread. On failure, both `release`
-         * callbacks have run and the descriptor is disposed here.
+         * Hands the descriptor to the core and starts the tunnel. Blocks through
+         * lookup and handshake, so callers must keep it off the main thread.
+         * The core owns the descriptor from here on every path, failure
+         * included, and the bypass `release` has run on failure.
          */
         fun start(
             library: BoreasLibrary,
             config: CoreConfig,
-            device: TunDevice,
+            descriptor: ParcelFileDescriptor,
             bypass: VpnBypass,
         ): TunnelStart {
             val out = PointerByReference()
 
             val status = NativeArena().use { arena ->
                 CoreStatus.of(
-                    library.boreas_tunnel_start(
+                    library.boreas_tunnel_start_fd(
                         config.marshal(arena),
-                        device.vtable(config.mtu),
+                        descriptor.detachFd(),
+                        config.mtu.toShort(),
                         bypass.vtable(),
                         out,
                     ),
@@ -239,12 +236,10 @@ internal class NativeTunnel private constructor(
 
             val handle = out.value
             if (status != CoreStatus.Ok || handle == null) {
-                device.awaitRelease()
-                device.dispose()
                 return TunnelStart.Refused(if (status == CoreStatus.Ok) CoreStatus.Datapath else status)
             }
 
-            return TunnelStart.Started(NativeTunnel(library, handle, device, bypass))
+            return TunnelStart.Started(NativeTunnel(library, handle, bypass))
         }
     }
 }

@@ -40,13 +40,6 @@ class BoreasLayoutTest {
     // Vtable offsets: a shift would call the wrong function pointer.
 
     @Test
-    fun `BoreasDevice puts context first and mtu after five pointers`() {
-        val device = BoreasDevice()
-        assertEquals(0, offsetOf(device, "context"))
-        assertEquals(5 * pointer, offsetOf(device, "mtu"))
-    }
-
-    @Test
     fun `BoreasBypass is three pointers with context first`() {
         val bypass = BoreasBypass()
         assertEquals(0, offsetOf(bypass, "context"))

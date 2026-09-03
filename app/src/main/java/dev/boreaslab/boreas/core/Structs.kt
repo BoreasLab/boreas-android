@@ -4,7 +4,7 @@ import com.sun.jna.Callback
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
 
-/* These five structs follow the widths and field order in api/abi.md. @FieldOrder
+/* These structs follow the widths and field order in api/abi.md. @FieldOrder
  * is explicit because the JVM does not promise declaration order, and R8 must
  * retain the fields and annotation or offsets can change without a diagnostic.
  * C `bool` is one byte, represented here by `Byte` and explicit zero comparisons.
@@ -13,44 +13,6 @@ import com.sun.jna.Structure
 /** Exposes JNA's protected offset lookup for [BoreasLayoutTest]. */
 internal abstract class BoreasStruct : Structure() {
     fun offsetOf(field: String): Int = fieldOffset(field)
-}
-
-/** `BoreasDevice`: the TUN supplied by this app. Callbacks run on core threads. */
-@Structure.FieldOrder("context", "recv", "send", "close", "release", "mtu")
-internal class BoreasDevice : BoreasStruct() {
-
-    @JvmField var context: Pointer? = null
-
-    @JvmField var recv: Recv? = null
-
-    @JvmField var send: Send? = null
-
-    @JvmField var close: Close? = null
-
-    @JvmField var release: Release? = null
-
-    /** At least 1280, the IPv6 floor, and equal to `BoreasConfig.mtu`. */
-    @JvmField var mtu: Short = 0
-
-    /** Reads one IP packet: count, `0` for "ask again", or negative errno. */
-    fun interface Recv : Callback {
-        fun invoke(context: Pointer?, buffer: Pointer, capacity: SizeT): SSizeT
-    }
-
-    /** Writes one whole IP packet: `0` or negative errno; short writes are errors. */
-    fun interface Send : Callback {
-        fun invoke(context: Pointer?, buffer: Pointer, length: SizeT): SSizeT
-    }
-
-    /** Makes an in-flight [Recv] return and may run while it is blocked. */
-    fun interface Close : Callback {
-        fun invoke(context: Pointer?)
-    }
-
-    /** Runs once, after every other callback has returned. */
-    fun interface Release : Callback {
-        fun invoke(context: Pointer?)
-    }
 }
 
 /** `BoreasBypass`: protects sockets from re-entering the tunnel. */

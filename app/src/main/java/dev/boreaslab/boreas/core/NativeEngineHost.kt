@@ -60,14 +60,13 @@ internal class NativeEngineHost(
             is Establishment.Rejected -> return EngineStart.Refused(TypedFailure.InterfaceRejected)
         }
 
-        val device = TunDevice(descriptor)
         val bypass = vpn.bypass()
         // The one number that must appear twice. Read from the same field the
         // interface was built from, so the two cannot be given different answers.
         val config = CoreConfig(engine, platform.mtu.bytes, authority.load())
 
         return when (val started = withContext(Dispatchers.IO) {
-            NativeTunnel.start(library, config, device, bypass)
+            NativeTunnel.start(library, config, descriptor, bypass)
         }) {
             is TunnelStart.Refused ->
                 EngineStart.Refused(TypedFailure.CoreRefused(Operation.Start, started.status))

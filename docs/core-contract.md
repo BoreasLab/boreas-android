@@ -27,7 +27,7 @@ Compose UI -> BoreasVpnService -> NativeEngineHost -> libboreas.so
 | Concern | This repository owns | The core owns |
 |---|---|---|
 | User interaction | consent, settings, Compose state, notification actions | nothing |
-| VPN device | `VpnService`, TUN creation, addresses, routes, OS lifecycle | reads and writes it through `BoreasDevice` |
+| VPN device | `VpnService`, TUN creation, addresses, routes, OS lifecycle | reads, writes, and finally closes the descriptor it was handed |
 | Packet processing | one descriptor, handed over once | parsing, reassembly, MTU, ICMP, TCP, UDP, policy, egress |
 | Socket bypass | `VpnService.protect(fd)` through `BoreasBypass` | asks, and fails the dial when refused |
 | Observability | folds the event stream into state a screen can show | the event stream, which is the whole diagnostic surface |
@@ -41,12 +41,10 @@ Compose UI -> BoreasVpnService -> NativeEngineHost -> libboreas.so
 | The ABI comparison at startup, before anything else | `core/BoreasLibrary.kt`, `BoreasCore.load` |
 | `Builder.setMtu(n)` and `BoreasConfig.mtu` the same `n` | `PlatformConfig.mtu`, read by `BoreasVpnService.establish` and `CoreConfig` |
 | `establish()` null-checked | `Establishment.Refused` |
-| Every callback object held in a long-lived field | `core/TunDevice.kt`, `core/VpnBypass.kt` |
-| `recv` returns `0` on timeout rather than blocking | `TunDevice.recv`, `poll(2)` with a bounded interval |
-| Never `close(fd)` to unblock a read | `TunDevice.close` sets a flag; nothing closes to signal |
-| `send` errors on a short write | `TunDevice.send` |
+| Every callback object held in a long-lived field | `core/VpnBypass.kt`; there is no device callback |
+| The descriptor handed over once, by `detachFd()` | `NativeTunnel.start`, `boreas_tunnel_start_fd` |
 | Events read on a thread of their own | `NativeTunnel.reader` |
-| shutdown, join, free, then close the descriptor | `NativeTunnel.shutdown`, `TunDevice.awaitRelease` |
+| shutdown, join, free; the core closes the descriptor at free | `NativeTunnel.shutdown` |
 | CA material kept, certificate offered to the installer | `data/KeystoreAuthorityStore.kt`, `data/CertificateExport.kt` |
 
 ## What is unrepresentable rather than checked

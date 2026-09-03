@@ -19,9 +19,11 @@ internal interface BoreasLibrary : Library {
 
     fun boreas_abi_version(): Int
 
-    fun boreas_tunnel_start(
+    /** Takes the descriptor; the core owns it from here, on every path. */
+    fun boreas_tunnel_start_fd(
         config: BoreasConfig,
-        device: BoreasDevice,
+        fd: Int,
+        mtu: Short,
         bypass: BoreasBypass,
         out: PointerByReference,
     ): Int
