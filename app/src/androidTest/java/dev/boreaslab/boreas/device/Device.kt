@@ -74,9 +74,32 @@ internal fun awaitTransition(
 ): VpnLifecycleState = runBlocking {
     val seen = withTimeoutOrNull(timeoutMillis) {
         SessionStateBus.log.first { entries -> entries.any { entry -> predicate(entry.state) } }
-    } ?: throw AssertionError("waited ${timeoutMillis}ms; transitions were ${transitions()}")
+    } ?: throw AssertionError(
+        "waited ${timeoutMillis}ms; transitions were ${transitions()}\n${ourFrames()}",
+    )
     seen.first { entry -> predicate(entry.state) }.state
 }
+
+/**
+ * Where our own threads are, for a wait that timed out.
+ *
+ * A suspended coroutine sits on no thread, so silence here means the session is
+ * parked on something rather than blocked in it. That distinction is the whole
+ * question when a start never returns.
+ */
+private fun ourFrames(): String =
+    Thread.getAllStackTraces()
+        .filterValues { frames ->
+            frames.any { frame ->
+                frame.className.startsWith("dev.boreaslab") || frame.className.startsWith("com.sun.jna")
+            }
+        }
+        .entries
+        .joinToString("\n") { (thread, frames) ->
+            thread.name + frames.take(FRAME_LIMIT).joinToString("\n    ", prefix = "\n    ")
+        }
+
+private const val FRAME_LIMIT = 12
 
 /** Newest first, for a failure message. */
 internal fun transitions(): List<VpnLifecycleState> =

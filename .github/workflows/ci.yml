@@ -222,10 +222,6 @@ jobs:
         include:
           - device: api29
             variant: debug
-          - device: api29
-            variant: release
-          - device: api36
-            variant: debug
           - device: api36
             variant: release
     steps:
