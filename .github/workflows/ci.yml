@@ -288,18 +288,6 @@ jobs:
         run: |
           ./gradlew --no-daemon -Pboreas.testBuildType="$VARIANT" "$DEVICE${VARIANT^}AndroidTest"
 
-      # Temporary. The release cell runs no tests and says nothing about why.
-      - name: Probe the test APK
-        if: ${{ always() && matrix.variant == 'release' }}
-        shell: bash
-        run: |
-          shopt -s nullglob globstar
-          for apk in app/build/outputs/apk/**/*.apk; do
-            printf '%s: %s\n' "$apk" "$(unzip -p "$apk" 'classes*.dex' | grep -ac boreaslab || true)"
-          done
-          unzip -p app/build/outputs/apk/androidTest/release/*.apk AndroidManifest.xml |
-            strings | grep -iE 'instrumentation|runner|targetPackage' | head -20
-
       # A minified test APK can lose every test to R8 and still report success.
       - name: Assert the suite ran
         shell: bash

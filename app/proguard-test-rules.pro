@@ -11,6 +11,12 @@
 -dontshrink
 -dontobfuscate
 
+# The classes survive without this and the tests still do not run: R8 discards
+# annotations unless asked, and a class with no @Test on it is a class the
+# runner has no reason to call. Signature and the two nesting attributes go with
+# them, because Kotlin's own reflection reads all three.
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+
 # androidx.test compiles against Error Prone's annotations and does not ship
 # them. They are source-retention, so nothing looks for them at run time, but R8
 # reports a reference it cannot resolve as an error.
