@@ -124,7 +124,7 @@ result and no third-party action owns the emulator.
 | The library loads at all | emulator | `CoreLinkTest`. The only way: an Android `.so` links bionic and will not open on a host JVM at any price. |
 | Startup ABI check | emulator | `CoreLinkTest`, the matching side. Refusing a mismatch needs a build with a wrong `abiVersion`, which no cell produces yet. |
 | First consent | emulator | `ConsentTest`, both answers, and that a withheld one establishes nothing |
-| Start then immediate Stop | emulator | `TunnelLifecycleTest`, two cycles, asserting no `/dev/tun` descriptor outlives a stop |
+| Start then immediate Stop | emulator | `TunnelLifecycleTest`, two cycles, asserting no `/dev/tun` descriptor outlives a stop. Release builds only; see below. |
 | Real traffic | emulator | Not yet. Needs an upstream on the runner, reached from the guest at `10.0.2.2`. |
 | A blocked name | emulator | Not yet. Same upstream, asserting nothing arrived. |
 | Reload | emulator | Not yet. |
@@ -136,3 +136,25 @@ result and no third-party action owns the emulator.
 Two more, from docs/verified-inputs.md, are hardware's for the same reason: an
 OEM's Settings accepting a `.crt` written to Downloads, and lockdown's
 interaction with the per-app exclusion list.
+
+## A Debug Build Does Not Reach Running
+
+Found by the device lane on 2026-09-05, and unexplained.
+
+A session on a build with `SIMULATION_AVAILABLE` reaches `Starting` and stops
+there. The interface is up by then: logcat carries `Vpn: Established by
+org.joefang.boreas.android on tun0`, and the address the draft names is on
+`tun0`. Nothing further is logged, no thread of ours is blocked, and no
+exception reaches logcat, so the start coroutine is suspended rather than stuck
+in a call.
+
+The matrix was filled once to separate the two variables. Both release cells
+passed and both debug cells failed at 29 and at 36 alike, so this is the build
+type and not the API level. The one branch release does not execute is
+`BoreasVpnService.selectEngine`, where `SIMULATION_AVAILABLE` short-circuits
+before the setting is read; on a release build the DataStore read never happens.
+
+`TunnelLifecycleTest` assumes its way out of a simulator-capable build, so the
+claim is still checked on every push against the artefact that ships. Deleting
+the assumption is the fix; nothing here is evidence that the tunnel is wrong on
+a debug build, only that this app never sees it start.
