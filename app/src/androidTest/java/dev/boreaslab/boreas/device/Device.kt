@@ -71,13 +71,19 @@ private const val POLL_MILLIS = 50L
 internal fun awaitTransition(
     timeoutMillis: Long,
     predicate: (VpnLifecycleState) -> Boolean,
-): VpnLifecycleState = runBlocking {
-    val seen = withTimeoutOrNull(timeoutMillis) {
-        SessionStateBus.log.first { entries -> entries.any { entry -> predicate(entry.state) } }
-    } ?: throw AssertionError(
+): VpnLifecycleState = transitionWithin(timeoutMillis, predicate)
+    ?: throw AssertionError(
         "waited ${timeoutMillis}ms; transitions were ${transitions()}\n${ourFrames()}",
     )
-    seen.first { entry -> predicate(entry.state) }.state
+
+/** The same wait, for a caller that expects the state may never arrive. */
+internal fun transitionWithin(
+    timeoutMillis: Long,
+    predicate: (VpnLifecycleState) -> Boolean,
+): VpnLifecycleState? = runBlocking {
+    withTimeoutOrNull(timeoutMillis) {
+        SessionStateBus.log.first { entries -> entries.any { entry -> predicate(entry.state) } }
+    }?.first { entry -> predicate(entry.state) }?.state
 }
 
 /**

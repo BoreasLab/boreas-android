@@ -140,8 +140,9 @@ interaction with the per-app exclusion list.
 ## A Debug Build Does Not Reach Running
 
 Found by the device lane on 2026-09-05, and unexplained. `TunnelLifecycleTest`
-carries `@Ignore` and this is the note it points at; deleting the annotation is
-the check.
+asserts where the session stops today rather than where it should, so the run
+stays honest and the harness stays alive; it fails the day the finding is fixed,
+which is the day to restore the real assertion.
 
 A session reaches `Starting` and stops there. The interface is up by then:
 logcat carries `Vpn: Established by org.joefang.boreas.android on tun0`, and the
