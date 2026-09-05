@@ -124,7 +124,7 @@ result and no third-party action owns the emulator.
 | The library loads at all | emulator | `CoreLinkTest`. The only way: an Android `.so` links bionic and will not open on a host JVM at any price. |
 | Startup ABI check | emulator | `CoreLinkTest`, the matching side. Refusing a mismatch needs a build with a wrong `abiVersion`, which no cell produces yet. |
 | First consent | emulator | `ConsentTest`, both answers, and that a withheld one establishes nothing |
-| Start then immediate Stop | emulator | `TunnelLifecycleTest`, two cycles, asserting no `/dev/tun` descriptor outlives a stop. In `androidTestRelease`; see below. |
+| Start then immediate Stop | emulator | Not yet. The session does not reach Running here; see below. |
 | Real traffic | emulator | Not yet. Needs an upstream on the runner, reached from the guest at `10.0.2.2`. |
 | A blocked name | emulator | Not yet. Same upstream, asserting nothing arrived. |
 | Reload | emulator | Not yet. |
@@ -139,10 +139,9 @@ interaction with the per-app exclusion list.
 
 ## A Debug Build Does Not Reach Running
 
-Found by the device lane on 2026-09-05, and unexplained. `TunnelLifecycleTest`
-asserts where the session stops today rather than where it should, so the run
-stays honest and the harness stays alive; it fails the day the finding is fixed,
-which is the day to restore the real assertion.
+Found by the device lane on 2026-09-05, and unexplained. There is no test for it
+in the suite: the behaviour is not reproducible enough to gate a push on, which
+is itself part of the finding.
 
 A session reaches `Starting` and stops there. The interface is up by then:
 logcat carries `Vpn: Established by org.joefang.boreas.android on tun0`, and the
@@ -157,7 +156,21 @@ contract describes, so this is read as part of the finding rather than as a leak
 of its own, and `TunnelLifecycleTest` does not assert it. The assertion returns
 with the rest when the session reaches Running.
 
-Both API levels fail to reach Running alike, so the level is not that variable. The one branch a
+Both API levels fail to reach Running alike, so the level is not that variable.
+What the session does before giving up is not stable either. Across runs of the
+same commit it has reported `Stopped, AwaitingConsent, Starting, Stopped`, then
+`Stopped, AwaitingConsent, Stopped`, then `Stopped` alone, with a grant that
+`VpnService.prepare` had just confirmed. A start that gets a different distance
+each time is why no test asserts one: the suite would report the emulator's mood
+rather than the app's behaviour.
+
+The harness this needs was written and then removed, and is worth rebuilding
+rather than reinventing: start the service with `Context.startService` from a
+foreground Activity, because the shell holds no BIND_VPN_SERVICE and a
+backgrounded app may not start a service; wait on `SessionStateBus.log` rather
+than `state`, because the latter is a StateFlow and conflates away a state the
+session passed through; and count `/proc/self/fd` links to `/dev/tun`, which
+instrumentation shares with the service. The one branch a
 release build does not execute is `BoreasVpnService.selectEngine`, where
 `SIMULATION_AVAILABLE` short-circuits before the simulation setting is read; a
 release build never performs that DataStore read. That is the suspect, and it is

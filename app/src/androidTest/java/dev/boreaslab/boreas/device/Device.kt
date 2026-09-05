@@ -4,18 +4,14 @@ import android.os.ParcelFileDescriptor.AutoCloseInputStream
 import android.os.SystemClock
 import android.system.Os
 import androidx.test.platform.app.InstrumentationRegistry
-import dev.boreaslab.boreas.service.SessionStateBus
-import dev.boreaslab.boreas.service.VpnLifecycleState
 import java.io.File
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 
-// What an instrumented test can do that the app cannot, and the waits it needs.
-// Test names here are camelCase rather than the backtick sentences :domain uses.
-// DEX below version 040 forbids a space in a member name, and 040 needs minSdk 30.
-// Everything here reads or writes state outside the app: the shell, the app-op
-// table, /proc. The assertions live in the test classes.
+// What an instrumented test can do that the app cannot. Everything here reads
+// or writes state outside the app: the shell, the app-op table, /proc. The
+// assertions live in the test classes.
+//
+// Test names are camelCase rather than the backtick sentences :domain uses: DEX
+// below version 040 forbids a space in a member name, and 040 needs minSdk 30.
 
 /** Runs a command as the shell UID and returns its combined output. */
 internal fun shell(command: String): String {
@@ -57,62 +53,6 @@ internal fun setConsent(consent: Consent) {
 /** How long an app-op write may take to become readable, and how often to look. */
 private const val SETTLE_MILLIS = 5_000L
 private const val POLL_MILLIS = 50L
-
-/**
- * Waits for a state the session actually passed through, and names them all if
- * it never did.
- *
- * Reads the transition log rather than `SessionStateBus.state`. That cell is a
- * StateFlow, so it conflates: a session that reached Running and stopped again
- * between two resumptions of the collector shows only the last of them, and the
- * test then waits sixty seconds for something that already happened. The log
- * only grows, so conflating it loses nothing.
- */
-internal fun awaitTransition(
-    timeoutMillis: Long,
-    predicate: (VpnLifecycleState) -> Boolean,
-): VpnLifecycleState = transitionWithin(timeoutMillis, predicate)
-    ?: throw AssertionError(
-        "waited ${timeoutMillis}ms; transitions were ${transitions()}\n${ourFrames()}",
-    )
-
-/** The same wait, for a caller that expects the state may never arrive. */
-internal fun transitionWithin(
-    timeoutMillis: Long,
-    predicate: (VpnLifecycleState) -> Boolean,
-): VpnLifecycleState? = runBlocking {
-    withTimeoutOrNull(timeoutMillis) {
-        SessionStateBus.log.first { entries -> entries.any { entry -> predicate(entry.state) } }
-    }?.first { entry -> predicate(entry.state) }?.state
-}
-
-/**
- * Where our own threads are, for a wait that timed out.
- *
- * A suspended coroutine sits on no thread, so silence here means the session is
- * parked on something rather than blocked in it. That distinction is the whole
- * question when a start never returns.
- */
-private fun ourFrames(): String =
-    Thread.getAllStackTraces()
-        .filterValues { frames ->
-            frames.any { frame ->
-                frame.className.startsWith("dev.boreaslab") || frame.className.startsWith("com.sun.jna")
-            }
-        }
-        .entries
-        .joinToString("\n") { (thread, frames) ->
-            thread.name + frames.take(FRAME_LIMIT).joinToString("\n    ", prefix = "\n    ")
-        }
-
-private const val FRAME_LIMIT = 12
-
-/** Newest first, for a failure message. */
-internal fun transitions(): List<VpnLifecycleState> =
-    SessionStateBus.log.value.map { entry -> entry.state }
-
-/** The log outlives a test method, so a test that reads it starts by emptying it. */
-internal fun forgetTransitions() = SessionStateBus.clearLog()
 
 /**
  * Descriptors of this process that name the TUN device.
