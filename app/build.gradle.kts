@@ -356,11 +356,15 @@ android {
                     device = "Pixel 2"
                     apiLevel = 29
                     systemImageSource = "aosp"
+                    // Without this, 29 resolves to a 32-bit x86 image, and x86 is
+                    // the one shipped ABI no phone runs.
+                    require64Bit = true
                 }
                 create<ManagedVirtualDevice>("api36") {
                     device = "Pixel 6"
                     apiLevel = 36
                     systemImageSource = "aosp"
+                    require64Bit = true
                 }
             }
         }

@@ -10,3 +10,8 @@
 # untested, which is the right half to give up: a renamed field is still there,
 # a removed one is not.
 -dontobfuscate
+
+# androidx.test compiles against Error Prone's annotations and does not ship
+# them. They are source-retention, so nothing looks for them at run time, but R8
+# reports a reference it cannot resolve as an error.
+-dontwarn com.google.errorprone.annotations.**
