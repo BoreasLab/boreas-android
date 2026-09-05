@@ -1,6 +1,7 @@
 package dev.boreaslab.boreas.device
 
 import android.os.ParcelFileDescriptor.AutoCloseInputStream
+import android.os.SystemClock
 import android.system.Os
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.boreaslab.boreas.service.SessionStateBus
@@ -31,16 +32,31 @@ internal enum class Consent(val mode: String) {
 }
 
 /**
- * Sets consent without a dialog.
+ * Sets consent without a dialog, and waits for the table to say so.
  *
  * `VpnService.prepare` reads this app-op, so writing it is the grant the system
  * dialog performs. Nothing else can: the dialog is a system Activity, and a
  * headless emulator has nobody to tap it.
+ *
+ * The write returns before the read shows it. Left unchecked, the next line of a
+ * test reads the old answer, and on a slow API 29 image that is what happened.
  */
 internal fun setConsent(consent: Consent) {
     val target = InstrumentationRegistry.getInstrumentation().targetContext.packageName
     shell("appops set $target ACTIVATE_VPN ${consent.mode}")
+
+    val deadline = SystemClock.uptimeMillis() + SETTLE_MILLIS
+    do {
+        if (shell("appops get $target ACTIVATE_VPN").contains(consent.mode)) return
+        SystemClock.sleep(POLL_MILLIS)
+    } while (SystemClock.uptimeMillis() < deadline)
+
+    throw AssertionError("ACTIVATE_VPN did not become ${consent.mode} within ${SETTLE_MILLIS}ms")
 }
+
+/** How long an app-op write may take to become readable, and how often to look. */
+private const val SETTLE_MILLIS = 5_000L
+private const val POLL_MILLIS = 50L
 
 /**
  * Waits for a state the session actually passed through, and names them all if

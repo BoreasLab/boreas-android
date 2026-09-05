@@ -1,6 +1,7 @@
 package dev.boreaslab.boreas.device
 
 import android.content.Intent
+import android.net.VpnService
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -9,6 +10,7 @@ import dev.boreaslab.boreas.service.BoreasVpnService
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -54,6 +56,10 @@ class TunnelLifecycleTest {
     @Test
     fun aSessionStartsRunsAndLeavesNoDescriptorBehind() {
         setConsent(Consent.Granted)
+        // Without this the next sixty seconds are spent in AwaitingConsent, and
+        // the timeout blames the tunnel for a grant that never arrived.
+        assertNull("consent did not take effect", VpnService.prepare(context))
+
         val before = tunDescriptors()
 
         repeat(2) {
