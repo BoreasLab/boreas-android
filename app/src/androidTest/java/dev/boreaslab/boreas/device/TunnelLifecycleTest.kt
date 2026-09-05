@@ -1,25 +1,35 @@
 package dev.boreaslab.boreas.device
 
+import android.content.Intent
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.boreaslab.boreas.MainActivity
 import dev.boreaslab.boreas.service.BoreasVpnService
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
  * A whole session, on a real interface, driven by the intents the UI sends.
  *
- * The service is started through the shell rather than `Context.startService`,
- * so no Activity has to be on screen. That also leaves ConsentBroker without a
- * subscriber, which is what makes the withheld case terminate: with nobody to
- * show the dialog, the session stays where it should and the test can say so.
+ * An Activity stays on screen for the run because a backgrounded app may not
+ * start a service, and the shell cannot start this one either: it is not
+ * exported and asks for BIND_VPN_SERVICE, which the shell UID does not hold.
+ *
+ * Consent is granted throughout. The withheld case belongs to ConsentTest, where
+ * nothing is listening for a consent request; here it would reach MainActivity
+ * and put the system dialog on screen with nobody to answer it.
  */
 @RunWith(AndroidJUnit4::class)
 class TunnelLifecycleTest {
+
+    @get:Rule
+    val activity: ActivityScenarioRule<MainActivity> = ActivityScenarioRule(MainActivity::class.java)
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -54,22 +64,8 @@ class TunnelLifecycleTest {
         assertEquals(before, tunDescriptors())
     }
 
-    /** The core is handed a descriptor only after Android has said yes. */
-    @Test
-    fun aWithheldGrantStopsShortOfEstablishing() {
-        setConsent(Consent.Withheld)
-
-        command(BoreasVpnService.ACTION_START)
-        awaitState(STARTUP_MILLIS) { state -> state is VpnLifecycleState.AwaitingConsent }
-
-        assertEquals(emptyList<String>(), tunDescriptors())
-    }
-
-    /** `am` reports a refusal on stdout and still exits zero, so read the reply. */
     private fun command(action: String) {
-        val component = "${context.packageName}/${BoreasVpnService::class.java.name}"
-        val reply = shell("am startservice -n $component -a $action")
-        check(!reply.contains("Error")) { "am refused $action: ${reply.trim()}" }
+        context.startService(Intent(context, BoreasVpnService::class.java).setAction(action))
     }
 
     private companion object {

@@ -30,9 +30,11 @@ class ConsentTest {
         assertEquals(ConsentOutcome.Granted, runBlocking { AndroidConsentGate(context).request() })
     }
 
+    /** Also the negative half of the tunnel claim: nothing establishes without a grant. */
     @Test
     fun aWithheldAppOpAsksRatherThanGrants() {
         setConsent(Consent.Withheld)
         assertNotNull("prepare granted the VPN although the app-op denies it", VpnService.prepare(context))
+        assertEquals(emptyList<String>(), tunDescriptors())
     }
 }

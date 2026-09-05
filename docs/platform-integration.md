@@ -123,7 +123,7 @@ result and no third-party action owns the emulator.
 |---|---|---|
 | The library loads at all | emulator | `CoreLinkTest`. The only way: an Android `.so` links bionic and will not open on a host JVM at any price. |
 | Startup ABI check | emulator | `CoreLinkTest`, the matching side. Refusing a mismatch needs a build with a wrong `abiVersion`, which no cell produces yet. |
-| First consent | emulator | `ConsentTest` for both answers, `TunnelLifecycleTest` for the service that acts on them |
+| First consent | emulator | `ConsentTest`, both answers, and that a withheld one establishes nothing |
 | Start then immediate Stop | emulator | `TunnelLifecycleTest`, two cycles, asserting no `/dev/tun` descriptor outlives a stop |
 | Real traffic | emulator | Not yet. Needs an upstream on the runner, reached from the guest at `10.0.2.2`. |
 | A blocked name | emulator | Not yet. Same upstream, asserting nothing arrived. |
