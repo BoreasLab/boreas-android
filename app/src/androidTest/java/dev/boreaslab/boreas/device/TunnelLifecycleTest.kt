@@ -82,8 +82,15 @@ class TunnelLifecycleTest {
     }
 
     private companion object {
-        /** dlopen, the interface, and the core's own start, on a cold emulator. */
-        const val STARTUP_MILLIS = 60_000L
+        /**
+         * dlopen, the interface, and the core's own start.
+         *
+         * Generous because the emulator is still compiling the app it just
+         * installed: a minute of dexopt has been seen between the start command
+         * and the service acting on it, and a run that gave up inside that
+         * window reported no transitions at all.
+         */
+        const val STARTUP_MILLIS = 150_000L
 
         /** Long enough that a session which was going to settle would have. */
         const val SETTLE_MILLIS = 20_000L
