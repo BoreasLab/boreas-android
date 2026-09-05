@@ -286,7 +286,11 @@ jobs:
           DEVICE: ${{ matrix.device }}
           VARIANT: ${{ matrix.variant }}
         run: |
-          ./gradlew --no-daemon -Pboreas.testBuildType="$VARIANT" "$DEVICE${VARIANT^}AndroidTest"
+          status=0
+          ./gradlew --no-daemon --info \
+            -Pboreas.testBuildType="$VARIANT" "$DEVICE${VARIANT^}AndroidTest" > gradle.log 2>&1 || status=$?
+          grep -aiE 'INSTRUMENTATION|TestRunner|am instrument|^> Task|^BUILD ' gradle.log | tail -60
+          exit "$status"
 
       # A minified test APK can lose every test to R8 and still report success.
       - name: Assert the suite ran
@@ -304,6 +308,7 @@ jobs:
           path: |
             app/build/reports/androidTests/**
             app/build/outputs/androidTest-results/**
+            gradle.log
           if-no-files-found: ignore
           retention-days: 7
 
