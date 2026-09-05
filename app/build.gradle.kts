@@ -321,9 +321,11 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Shrinking is what a release device run exists to test, so it stays
-            // on. Renaming does not: the test APK is compiled against the original
-            // names and would look them up under the new ones.
+            // Only while this build type is the one under instrumentation. See
+            // the file: renaming has to go off in the app, not in the test APK.
+            if (instrumentedBuildType == "release") {
+                proguardFiles("proguard-under-test.pro")
+            }
             testProguardFiles("proguard-test-rules.pro")
             buildConfigField("boolean", "SIMULATION_AVAILABLE", "false")
         }
