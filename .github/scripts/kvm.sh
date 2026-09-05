@@ -7,8 +7,13 @@
 # and boots so slowly that the job hits its timeout, which is a far worse thing
 # to read a log about. Absence of the device is fatal here for the same reason.
 #
-# Assumes bash 4+, an Ubuntu runner, and passwordless sudo. Writes a udev rule
-# and prints one line; the exit status is the answer.
+# chmod rather than a udev rule. `udevadm trigger` returns before the rule has
+# been applied, so the check below raced it and the same runner answered both
+# ways on consecutive pushes. Nothing recreates the node inside a job, so the
+# rule was guarding against something that does not happen.
+#
+# Assumes bash 4+, an Ubuntu runner, and passwordless sudo. Prints one line; the
+# exit status is the answer.
 set -euo pipefail
 
 (($# == 0)) || {
@@ -21,12 +26,7 @@ set -euo pipefail
   exit 1
 }
 
-# static_node reapplies the mode to a device node created later in the job, which
-# a one-shot chmod would not survive.
-printf 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"\n' |
-  sudo tee /etc/udev/rules.d/99-kvm-writable.rules >/dev/null
-sudo udevadm control --reload-rules
-sudo udevadm trigger --name-match=kvm
+sudo chmod 0666 /dev/kvm
 
 [[ -w /dev/kvm ]] || {
   printf '/dev/kvm is present but still not writable by %s\n' "$(id -un)" >&2
