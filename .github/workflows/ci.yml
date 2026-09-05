@@ -1,8 +1,8 @@
 # Continuous integration for the Android control surface.
 #
-# Three effect domains, so three jobs, and no `needs:` edge between any of them.
-# None consumes another's output, and running all three means one push reports
-# three results instead of hiding the second and third behind the first.
+# Four effect domains, so four jobs, and no `needs:` edge between any of them.
+# None consumes another's output, and running them all means one push reports
+# four results instead of hiding the rest behind the first.
 #
 #   gate       Properties of the source that no test inside the program can
 #              see: punctuation, one source of truth per scale, one icon
@@ -16,12 +16,16 @@
 #              into :domain fails here, because the module has no Android
 #              classpath to resolve it against.
 #
+#   device     What no JVM test can see. An Android .so links bionic and will
+#              not open on the host at any price, so the C boundary, consent,
+#              and descriptor ownership are only observable on a device. Gradle
+#              owns the emulator: see app/build.gradle.kts, testOptions.
+#
 #   workflows  The workflows themselves, which are code that runs with the
 #              repository checked out.
 #
-# Assertions about the tunnel itself belong to the phases that build it. When
-# the packet engine lands, its fixtures join `build`, and the device matrix in
-# docs/platform-integration.md runs where real hardware is.
+# `device` answers most of docs/platform-integration.md. What is left there needs
+# a second transport or a real path MTU, and stays hardware's to answer.
 #
 # Every action here is GitHub's own, at a major tag: see .github/zizmor.yml for
 # why that is the policy for actions/* and a hash for everyone else. No
@@ -196,6 +200,105 @@ jobs:
             domain/build/test-results/**
             app/build/reports/lint-results-*.html
             domain/build/reports/lint-results*.html
+          if-no-files-found: ignore
+          retention-days: 7
+
+  device:
+    name: Device (${{ matrix.device }}, ${{ matrix.variant }})
+    runs-on: ubuntu-latest
+    # Two thirds of this is one cold system-image download and boot. The tests
+    # themselves take about a minute.
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      # One cell's verdict never stands in for the other's.
+      fail-fast: false
+      matrix:
+        # The diagonal of {API level} x {build type}, not the product. 29 is the
+        # floor and where the platform differs most; release is what ships and
+        # the only build R8 has touched. The other two cells would boot two more
+        # emulators to re-answer what these already answer.
+        include:
+          - device: api29
+            variant: debug
+          - device: api36
+            variant: release
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Verify the Gradle wrapper
+        shell: bash
+        run: ./.github/scripts/gradle-wrapper.sh
+
+      - name: Cache Gradle
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.gradle/boreas-core
+          key: >-
+            gradle-${{ runner.os }}-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties',
+            'gradle/libs.versions.toml', 'gradle/boreas-core.properties', '**/*.gradle.kts') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      # `emulator` and `platform-tools` beyond what `build` needs. The system
+      # image is left to Gradle, which knows which one each device resolves to;
+      # naming it here would be a second place for that to be wrong.
+      - name: Install the Android SDK packages this build compiles against
+        shell: bash
+        run: >-
+          ./.github/scripts/android-sdk.sh 'platforms;android-37.0' 'build-tools;37.0.0'
+          'platform-tools' 'emulator'
+
+      - name: Make /dev/kvm writable
+        shell: bash
+        run: ./.github/scripts/kvm.sh
+
+      - name: Verify the pinned Boreas core
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./.github/scripts/boreas-core.sh
+
+      # Only the release cell needs one, and it needs one that is not the release
+      # key: this job holds no secret, so a fork's pull request runs it too.
+      - name: Make a throwaway signing key
+        if: ${{ matrix.variant == 'release' }}
+        shell: bash
+        run: ./.github/scripts/ephemeral-key.sh
+
+      # Gradle downloads the image, boots it, installs both APKs, runs, and tears
+      # the device down. The matrix values arrive as data rather than as a splice.
+      - name: Run the device suite
+        shell: bash
+        env:
+          DEVICE: ${{ matrix.device }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          ./gradlew --no-daemon -Pboreas.testBuildType="$VARIANT" "$DEVICE${VARIANT^}AndroidTest"
+
+      # No APK leaves this job. The release one carries a signature that is not
+      # ours, and an installable artefact signed by a throwaway key is worse than
+      # no artefact at all.
+      - name: Upload the device reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: device-${{ matrix.device }}-${{ matrix.variant }}
+          path: |
+            app/build/reports/androidTests/**
+            app/build/outputs/androidTest-results/**
           if-no-files-found: ignore
           retention-days: 7
 

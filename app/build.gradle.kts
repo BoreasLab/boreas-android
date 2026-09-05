@@ -1,3 +1,4 @@
+import com.android.build.api.dsl.ManagedVirtualDevice
 import java.net.URI
 import java.security.MessageDigest
 import java.util.Properties
@@ -239,6 +240,24 @@ fun signingSecret(name: String): String = providers.environmentVariable(name).or
         "BOREAS_KEYSTORE is set, so $name must be too. Signing is all four values or none.",
     )
 
+/**
+ * Which build type the instrumented tests instrument.
+ *
+ * Release is what ships, and R8 shrinking is proven only by running the shrunk
+ * artefact. Parsed against the closed set here: an unknown name would otherwise
+ * select a variant that does not exist and fail deep inside AGP.
+ */
+val instrumentedBuildType: String =
+    when (val requested = providers.gradleProperty("boreas.testBuildType").getOrElse("debug")) {
+        "debug", "release" -> requested
+        else -> throw GradleException("boreas.testBuildType is debug or release, not '$requested'")
+    }
+
+// Android installs nothing unsigned, and only debug carries a key of its own.
+require(instrumentedBuildType == "debug" || signingKeystore != null) {
+    "release instrumentation needs BOREAS_KEYSTORE; .github/scripts/ephemeral-key.sh makes a throwaway one"
+}
+
 android {
     namespace = "dev.boreaslab.boreas"
     // Compose 1.12 requires compiling against 37. targetSdk stays at 36 on purpose:
@@ -302,6 +321,10 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Shrinking is what a release device run exists to test, so it stays
+            // on. Renaming does not: the test APK is compiled against the original
+            // names and would look them up under the new ones.
+            testProguardFiles("proguard-test-rules.pro")
             buildConfigField("boolean", "SIMULATION_AVAILABLE", "false")
         }
     }
@@ -309,6 +332,38 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    testBuildType = instrumentedBuildType
+
+    /**
+     * The virtual devices the instrumented tests run on.
+     *
+     * Declared here rather than in a workflow, so one Gradle task reproduces a CI
+     * result and no third-party action owns the emulator: Gradle downloads the
+     * image, boots it, installs, runs, and tears down.
+     *
+     * Two API levels bracket every level-dependent branch this app has. 29 is the
+     * floor; CA install changes at 30, the notification permission at 33, and
+     * foreground-service types at 34, all under the ceiling. aosp rather than
+     * google_apis because nothing here calls Play services, and the smaller image
+     * boots faster.
+     */
+    testOptions {
+        managedDevices {
+            allDevices {
+                create<ManagedVirtualDevice>("api29") {
+                    device = "Pixel 2"
+                    apiLevel = 29
+                    systemImageSource = "aosp"
+                }
+                create<ManagedVirtualDevice>("api36") {
+                    device = "Pixel 6"
+                    apiLevel = 36
+                    systemImageSource = "aosp"
+                }
+            }
+        }
     }
 
     compileOptions {
@@ -414,4 +469,13 @@ dependencies {
     // against the same JNA that computes them at run time. Nothing in these tests
     // loads libboreas.
     testImplementation(libs.jna)
+
+    // The device lane, asserting what no JVM test can see: that the shipped .so
+    // links, that consent gates the native start, and that a stopped session
+    // leaves no descriptor behind. See docs/platform-integration.md.
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.kotlinx.coroutines.core)
 }

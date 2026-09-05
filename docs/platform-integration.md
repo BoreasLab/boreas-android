@@ -110,19 +110,29 @@ the rest names what to watch for on the first device.
 
 ## Device Test Matrix
 
-Nothing below has been run. There is no device on the machine this was built on.
+Split by venue. An emulator answers every claim about this app's own boundaries:
+the shared object, consent, the descriptor. It answers none about a second
+transport or a real path MTU, having neither.
 
-| Scenario | Required observation |
-|---|---|
-| The library loads at all | `Native.load` succeeds. It will not until the archive ships `libc++_shared.so`; see docs/verified-inputs.md. |
-| Startup ABI check | a mismatched library is refused with a sentence, not a crash |
-| First consent | no native start before consent succeeds |
-| Real traffic | a page loads through the tunnel |
-| A blocked name | `RESOLVED` arrives with `blocked`, and nothing left the device |
-| Reload | rules change with no connection dropped |
-| Start then immediate Stop | one descriptor close, `release` before it, no leaked context |
-| Protected DNS and egress sockets | the resolver answers, which it cannot if `protect` was skipped |
-| MTU agreement | `paths_reported` falls to near zero once senders converge |
-| Wi-Fi to cellular change | typed transition with no duplicate service session |
-| Process recreation | service and UI recover from persisted configuration |
-| IPv6 on a dual-stack network | routed into the tunnel rather than leaving beside it |
+`app/src/androidTest` holds the emulator half and `.github/workflows/ci.yml` runs
+it on every push, on API 29 debug and on API 36 release. The devices are declared
+in `app/build.gradle.kts` under `testOptions`, so one Gradle task reproduces a CI
+result and no third-party action owns the emulator.
+
+| Scenario | Venue | Answered by |
+|---|---|---|
+| The library loads at all | emulator | `CoreLinkTest`. The only way: an Android `.so` links bionic and will not open on a host JVM at any price. |
+| Startup ABI check | emulator | `CoreLinkTest`, the matching side. Refusing a mismatch needs a build with a wrong `abiVersion`, which no cell produces yet. |
+| First consent | emulator | `ConsentTest` for both answers, `TunnelLifecycleTest` for the service that acts on them |
+| Start then immediate Stop | emulator | `TunnelLifecycleTest`, two cycles, asserting no `/dev/tun` descriptor outlives a stop |
+| Real traffic | emulator | Not yet. Needs an upstream on the runner, reached from the guest at `10.0.2.2`. |
+| A blocked name | emulator | Not yet. Same upstream, asserting nothing arrived. |
+| Reload | emulator | Not yet. |
+| Protected DNS and egress sockets | emulator | Not yet. |
+| Process recreation | emulator | Not yet. |
+| MTU agreement | hardware | Every emulator path is 1500, so `paths_reported` falling to zero would prove nothing. |
+| Wi-Fi to cellular change | hardware | One virtual NIC. Disabling it is an outage, not a handover. |
+
+Two more, from docs/verified-inputs.md, are hardware's for the same reason: an
+OEM's Settings accepting a `.crt` written to Downloads, and lockdown's
+interaction with the per-app exclusion list.
