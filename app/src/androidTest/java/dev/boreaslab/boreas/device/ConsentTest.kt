@@ -24,14 +24,14 @@ class ConsentTest {
     fun withhold() = setConsent(Consent.Withheld)
 
     @Test
-    fun `a granted app-op prepares with no prompt`() {
+    fun aGrantedAppOpPreparesWithNoPrompt() {
         setConsent(Consent.Granted)
         assertNull("prepare returned an Intent although the app-op allows it", VpnService.prepare(context))
         assertEquals(ConsentOutcome.Granted, runBlocking { AndroidConsentGate(context).request() })
     }
 
     @Test
-    fun `a withheld app-op asks rather than grants`() {
+    fun aWithheldAppOpAsksRatherThanGrants() {
         setConsent(Consent.Withheld)
         assertNotNull("prepare granted the VPN although the app-op denies it", VpnService.prepare(context))
     }

@@ -36,7 +36,7 @@ class TunnelLifecycleTest {
      * descriptor and with never having opened it.
      */
     @Test
-    fun `a session starts, runs, and leaves no descriptor behind`() {
+    fun aSessionStartsRunsAndLeavesNoDescriptorBehind() {
         setConsent(Consent.Granted)
         val before = tunDescriptors()
 
@@ -56,7 +56,7 @@ class TunnelLifecycleTest {
 
     /** The core is handed a descriptor only after Android has said yes. */
     @Test
-    fun `a withheld grant stops short of establishing`() {
+    fun aWithheldGrantStopsShortOfEstablishing() {
         setConsent(Consent.Withheld)
 
         command(BoreasVpnService.ACTION_START)

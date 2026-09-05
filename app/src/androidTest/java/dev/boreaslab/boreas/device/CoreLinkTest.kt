@@ -25,7 +25,7 @@ class CoreLinkTest {
      * of them happened instead of only that something did.
      */
     @Test
-    fun `the library links and reports the pinned abi`() {
+    fun theLibraryLinksAndReportsThePinnedAbi() {
         val load = runBlocking { BoreasCore.describe() }
         assertEquals(EngineLoad.Linked(BuildConfig.BOREAS_ABI_VERSION), load)
     }
@@ -35,7 +35,7 @@ class CoreLinkTest {
      * debug build can be told to answer with a generated one instead.
      */
     @Test
-    fun `this run would select the native engine`() {
+    fun thisRunWouldSelectTheNativeEngine() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val simulated = runBlocking { SettingsRepository(context).simulationEnabled.first() }
         assertFalse("a simulated session proves nothing about the core", simulated)

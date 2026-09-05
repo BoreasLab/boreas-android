@@ -11,6 +11,8 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
 // What an instrumented test can do that the app cannot, and the waits it needs.
+// Test names here are camelCase rather than the backtick sentences :domain uses.
+// DEX below version 040 forbids a space in a member name, and 040 needs minSdk 30.
 // Everything here reads or writes state outside the app: the shell, the app-op
 // table, /proc. The assertions live in the test classes.
 
