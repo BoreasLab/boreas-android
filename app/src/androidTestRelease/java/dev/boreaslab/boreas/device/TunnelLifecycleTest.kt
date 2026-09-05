@@ -5,14 +5,12 @@ import android.net.VpnService
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import dev.boreaslab.boreas.BuildConfig
 import dev.boreaslab.boreas.MainActivity
 import dev.boreaslab.boreas.service.BoreasVpnService
 import dev.boreaslab.boreas.service.VpnLifecycleState
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assume.assumeFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -29,6 +27,11 @@ import org.junit.runner.RunWith
  * Consent is granted throughout. The withheld case belongs to ConsentTest, where
  * nothing is listening for a consent request; here it would reach MainActivity
  * and put the system dialog on screen with nobody to answer it.
+ *
+ * In the release source set, not because release is the interesting build but
+ * because a debug one never reaches Running: see docs/platform-integration.md.
+ * A source set says so at compile time, where an assumption would report a
+ * skipped test as a failed one on every debug run.
  */
 @RunWith(AndroidJUnit4::class)
 class TunnelLifecycleTest {
@@ -57,14 +60,6 @@ class TunnelLifecycleTest {
      */
     @Test
     fun aSessionStartsRunsAndLeavesNoDescriptorBehind() {
-        // Open finding, not a limitation of the emulator: on a build that offers
-        // the simulator, the session reaches Starting and stops there. No thread
-        // is blocked and nothing is logged, so the start coroutine is suspended,
-        // and the branch release never runs is the engine choice reading the
-        // simulation setting. Both release cells pass and both debug cells fail.
-        // See docs/platform-integration.md.
-        assumeFalse(BuildConfig.SIMULATION_AVAILABLE)
-
         setConsent(Consent.Granted)
         // Without this the next sixty seconds are spent in AwaitingConsent, and
         // the timeout blames the tunnel for a grant that never arrived.

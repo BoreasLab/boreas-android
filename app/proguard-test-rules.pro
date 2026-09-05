@@ -15,3 +15,9 @@
 # them. They are source-retention, so nothing looks for them at run time, but R8
 # reports a reference it cannot resolve as an error.
 -dontwarn com.google.errorprone.annotations.**
+
+# The test APK is minified too, and nothing inside it references a test class:
+# the runner finds them by reflection. Without this R8 removed every one of
+# them and the cell passed having run nothing, which is worse than failing.
+-keep @org.junit.runner.RunWith class * { *; }
+-keepattributes *Annotation*

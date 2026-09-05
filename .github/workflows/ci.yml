@@ -288,6 +288,11 @@ jobs:
         run: |
           ./gradlew --no-daemon -Pboreas.testBuildType="$VARIANT" "$DEVICE${VARIANT^}AndroidTest"
 
+      # A minified test APK can lose every test to R8 and still report success.
+      - name: Assert the suite ran
+        shell: bash
+        run: ./.github/scripts/device-ran.sh app/build/outputs/androidTest-results
+
       # No APK leaves this job. The release one carries a signature that is not
       # ours, and an installable artefact signed by a throwaway key is worse than
       # no artefact at all.
