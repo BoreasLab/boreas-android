@@ -240,24 +240,6 @@ fun signingSecret(name: String): String = providers.environmentVariable(name).or
         "BOREAS_KEYSTORE is set, so $name must be too. Signing is all four values or none.",
     )
 
-/**
- * Which build type the instrumented tests instrument.
- *
- * Release is what ships, and R8 shrinking is proven only by running the shrunk
- * artefact. Parsed against the closed set here: an unknown name would otherwise
- * select a variant that does not exist and fail deep inside AGP.
- */
-val instrumentedBuildType: String =
-    when (val requested = providers.gradleProperty("boreas.testBuildType").getOrElse("debug")) {
-        "debug", "release" -> requested
-        else -> throw GradleException("boreas.testBuildType is debug or release, not '$requested'")
-    }
-
-// Android installs nothing unsigned, and only debug carries a key of its own.
-require(instrumentedBuildType == "debug" || signingKeystore != null) {
-    "release instrumentation needs BOREAS_KEYSTORE; .github/scripts/ephemeral-key.sh makes a throwaway one"
-}
-
 android {
     namespace = "dev.boreaslab.boreas"
     // Compose 1.12 requires compiling against 37. targetSdk stays at 36 on purpose:
@@ -321,12 +303,6 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Only while this build type is the one under instrumentation. See
-            // the file: renaming has to go off in the app, not in the test APK.
-            if (instrumentedBuildType == "release") {
-                proguardFiles("proguard-under-test.pro")
-            }
-            testProguardFiles("proguard-test-rules.pro")
             buildConfigField("boolean", "SIMULATION_AVAILABLE", "false")
         }
     }
@@ -335,8 +311,6 @@ android {
         compose = true
         buildConfig = true
     }
-
-    testBuildType = instrumentedBuildType
 
     /**
      * The virtual devices the instrumented tests run on.
@@ -350,6 +324,9 @@ android {
      * foreground-service types at 34, all under the ceiling. aosp rather than
      * google_apis because nothing here calls Play services, and the smaller image
      * boots faster.
+     *
+     * The debug build, both times. Instrumenting the release build was tried and
+     * abandoned: see docs/platform-integration.md.
      */
     testOptions {
         managedDevices {

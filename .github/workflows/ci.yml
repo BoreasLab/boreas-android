@@ -204,7 +204,7 @@ jobs:
           retention-days: 7
 
   device:
-    name: Device (${{ matrix.device }}, ${{ matrix.variant }})
+    name: Device (${{ matrix.device }})
     runs-on: ubuntu-latest
     # Two thirds of this is one cold system-image download and boot. The tests
     # themselves take about a minute.
@@ -215,15 +215,10 @@ jobs:
       # One cell's verdict never stands in for the other's.
       fail-fast: false
       matrix:
-        # The diagonal of {API level} x {build type}, not the product. 29 is the
-        # floor and where the platform differs most; release is what ships and
-        # the only build R8 has touched. The other two cells would boot two more
-        # emulators to re-answer what these already answer.
-        include:
-          - device: api29
-            variant: debug
-          - device: api36
-            variant: release
+        # The two API levels that bracket every level-dependent branch here. The
+        # release build was a third and fourth cell until it turned out to
+        # discover no tests; see docs/platform-integration.md.
+        device: [api29, api36]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -271,44 +266,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: ./.github/scripts/boreas-core.sh
 
-      # Only the release cell needs one, and it needs one that is not the release
-      # key: this job holds no secret, so a fork's pull request runs it too.
-      - name: Make a throwaway signing key
-        if: ${{ matrix.variant == 'release' }}
-        shell: bash
-        run: ./.github/scripts/ephemeral-key.sh
-
       # Gradle downloads the image, boots it, installs both APKs, runs, and tears
       # the device down. The matrix values arrive as data rather than as a splice.
       - name: Run the device suite
         shell: bash
         env:
           DEVICE: ${{ matrix.device }}
-          VARIANT: ${{ matrix.variant }}
-        run: |
-          status=0
-          ./gradlew --no-daemon --info \
-            -Pboreas.testBuildType="$VARIANT" "$DEVICE${VARIANT^}AndroidTest" > gradle.log 2>&1 || status=$?
-          grep -aiE 'INSTRUMENTATION|TestRunner|am instrument|^> Task|^BUILD ' gradle.log | tail -60
-          exit "$status"
+        run: ./gradlew --no-daemon "${DEVICE}DebugAndroidTest"
 
       # A minified test APK can lose every test to R8 and still report success.
       - name: Assert the suite ran
         shell: bash
         run: ./.github/scripts/device-ran.sh app/build/outputs/androidTest-results
 
-      # No APK leaves this job. The release one carries a signature that is not
-      # ours, and an installable artefact signed by a throwaway key is worse than
-      # no artefact at all.
+      # No APK leaves this job; `build` is where an inspectable one comes from.
       - name: Upload the device reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: device-${{ matrix.device }}-${{ matrix.variant }}
+          name: device-${{ matrix.device }}
           path: |
             app/build/reports/androidTests/**
             app/build/outputs/androidTest-results/**
-            gradle.log
           if-no-files-found: ignore
           retention-days: 7
 

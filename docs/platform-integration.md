@@ -139,29 +139,45 @@ interaction with the per-app exclusion list.
 
 ## A Debug Build Does Not Reach Running
 
-Found by the device lane on 2026-09-05, and unexplained.
+Found by the device lane on 2026-09-05, and unexplained. `TunnelLifecycleTest`
+carries `@Ignore` and this is the note it points at; deleting the annotation is
+the check.
 
-A session on a build with `SIMULATION_AVAILABLE` reaches `Starting` and stops
-there. The interface is up by then: logcat carries `Vpn: Established by
-org.joefang.boreas.android on tun0`, and the address the draft names is on
-`tun0`. Nothing further is logged, no thread of ours is blocked, and no
-exception reaches logcat, so the start coroutine is suspended rather than stuck
-in a call.
+A session reaches `Starting` and stops there. The interface is up by then:
+logcat carries `Vpn: Established by org.joefang.boreas.android on tun0`, and the
+address the draft names is on `tun0`. Nothing further is logged, no thread of
+ours is blocked, and no exception arrives, so the start coroutine is suspended
+rather than stuck in a call. The state then reaches `Stopped` by way of the
+cancellation path, which means the service was destroyed while starting.
 
-The matrix was filled once to separate API level from build type. Both debug
-cells failed, at 29 and at 36 alike, so the API level is not the variable. The
-release cells reported success, but they ran no tests at all and so answer
-nothing: see the note below. The suspect remains `BoreasVpnService.selectEngine`,
-where `SIMULATION_AVAILABLE` short-circuits before the setting is read, so a
-release build never performs that DataStore read.
+Both API levels fail alike, so the level is not the variable. The one branch a
+release build does not execute is `BoreasVpnService.selectEngine`, where
+`SIMULATION_AVAILABLE` short-circuits before the simulation setting is read; a
+release build never performs that DataStore read. That is the suspect, and it is
+untested, because the release build cannot be instrumented here either.
 
-`TunnelLifecycleTest` lives in `app/src/androidTestRelease`, which today means
-it does not run: the release cell discovers no tests. Until that is fixed the
-claim is unproven rather than proven elsewhere, and nothing here is evidence
-that the tunnel is wrong on a debug build, only that this app never sees it
-start.
+## Instrumenting the Release Build Was Abandoned
 
-The release cell finds no tests to run, and reported success for it until
-`device-ran.sh` began failing an empty run. Neither R8 shrinking the test APK
-nor obfuscating the app explains it: both are off now and the count is still
-zero.
+Recorded so it is not re-derived. The intent was to run the same suite against
+the shipped, shrunk artefact, signed by a key made in the job so that the job
+would hold no secret and would run on a fork's pull request. The signing half
+worked: the key was generated, the release APK built and installed, and the
+emulator booted.
+
+The suite never ran. `am instrument` starts, discovers no test, and exits
+reporting success, with nothing in the Gradle log at `--info` to say why. Ruled
+out along the way, each by a run of its own:
+
+- R8 deleting the test classes. They are present: `unzip -p` of the release test
+  APK counts them in the dex.
+- R8 renaming the app out from under them. `-dontobfuscate` belongs in
+  `proguardFiles` and not `testProguardFiles`, which R8 reads only for the test
+  APK. Moving it changed nothing.
+- R8 shrinking the test APK, and R8 discarding the annotations the runner looks
+  for. `-dontshrink` and `-keepattributes` changed nothing.
+
+Each of those workarounds also removes some of what the cell was for: a run
+against an unobfuscated, unshrunk test APK proves less about the shipped
+artefact than it appears to. That, and the empty runs, is why the cells are
+gone. `device-ran.sh` stays: it is what turned four green and empty runs into a
+failure.
