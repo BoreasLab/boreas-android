@@ -42,14 +42,32 @@ internal fun setConsent(consent: Consent) {
     shell("appops set $target ACTIVATE_VPN ${consent.mode}")
 }
 
-/** The first published state matching [predicate], or a failure naming the last one seen. */
-internal fun awaitState(
+/**
+ * Waits for a state the session actually passed through, and names them all if
+ * it never did.
+ *
+ * Reads the transition log rather than `SessionStateBus.state`. That cell is a
+ * StateFlow, so it conflates: a session that reached Running and stopped again
+ * between two resumptions of the collector shows only the last of them, and the
+ * test then waits sixty seconds for something that already happened. The log
+ * only grows, so conflating it loses nothing.
+ */
+internal fun awaitTransition(
     timeoutMillis: Long,
     predicate: (VpnLifecycleState) -> Boolean,
 ): VpnLifecycleState = runBlocking {
-    withTimeoutOrNull(timeoutMillis) { SessionStateBus.state.first(predicate) }
-        ?: throw AssertionError("waited ${timeoutMillis}ms; state is ${SessionStateBus.state.value}")
+    val seen = withTimeoutOrNull(timeoutMillis) {
+        SessionStateBus.log.first { entries -> entries.any { entry -> predicate(entry.state) } }
+    } ?: throw AssertionError("waited ${timeoutMillis}ms; transitions were ${transitions()}")
+    seen.first { entry -> predicate(entry.state) }.state
 }
+
+/** Newest first, for a failure message. */
+internal fun transitions(): List<VpnLifecycleState> =
+    SessionStateBus.log.value.map { entry -> entry.state }
+
+/** The log outlives a test method, so a test that reads it starts by emptying it. */
+internal fun forgetTransitions() = SessionStateBus.clearLog()
 
 /**
  * Descriptors of this process that name the TUN device.

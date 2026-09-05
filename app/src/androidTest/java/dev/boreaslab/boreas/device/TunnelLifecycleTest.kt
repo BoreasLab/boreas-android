@@ -10,6 +10,7 @@ import dev.boreaslab.boreas.service.VpnLifecycleState
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,10 +34,15 @@ class TunnelLifecycleTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
+    @Before
+    fun forget() = forgetTransitions()
+
     @After
     fun stopAndWithhold() {
         command(BoreasVpnService.ACTION_STOP)
-        awaitState(TEARDOWN_MILLIS) { state -> state is VpnLifecycleState.Stopped }
+        // Cleanup, not an assertion. A wait that threw here would replace the
+        // test body's message with this one.
+        runCatching { awaitTransition(TEARDOWN_MILLIS) { state -> state is VpnLifecycleState.Stopped } }
         setConsent(Consent.Withheld)
     }
 
@@ -52,20 +58,23 @@ class TunnelLifecycleTest {
 
         repeat(2) {
             command(BoreasVpnService.ACTION_START)
-            val settled = awaitState(STARTUP_MILLIS) { state ->
+            val settled = awaitTransition(STARTUP_MILLIS) { state ->
                 state is VpnLifecycleState.Running || state is VpnLifecycleState.Failed
             }
             assertTrue("start ended at $settled", settled is VpnLifecycleState.Running)
 
             command(BoreasVpnService.ACTION_STOP)
-            awaitState(TEARDOWN_MILLIS) { state -> state is VpnLifecycleState.Stopped }
+            awaitTransition(TEARDOWN_MILLIS) { state -> state is VpnLifecycleState.Stopped }
+            forgetTransitions()
         }
 
         assertEquals(before, tunDescriptors())
     }
 
+    /** A null return is the system saying it resolved no such service, in silence. */
     private fun command(action: String) {
-        context.startService(Intent(context, BoreasVpnService::class.java).setAction(action))
+        val started = context.startService(Intent(context, BoreasVpnService::class.java).setAction(action))
+        checkNotNull(started) { "no service resolved for $action" }
     }
 
     private companion object {
