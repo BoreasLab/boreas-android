@@ -148,14 +148,20 @@ org.joefang.boreas.android on tun0`, and the address the draft names is on
 exception reaches logcat, so the start coroutine is suspended rather than stuck
 in a call.
 
-The matrix was filled once to separate the two variables. Both release cells
-passed and both debug cells failed at 29 and at 36 alike, so this is the build
-type and not the API level. The one branch release does not execute is
-`BoreasVpnService.selectEngine`, where `SIMULATION_AVAILABLE` short-circuits
-before the setting is read; on a release build the DataStore read never happens.
+The matrix was filled once to separate API level from build type. Both debug
+cells failed, at 29 and at 36 alike, so the API level is not the variable. The
+release cells reported success, but they ran no tests at all and so answer
+nothing: see the note below. The suspect remains `BoreasVpnService.selectEngine`,
+where `SIMULATION_AVAILABLE` short-circuits before the setting is read, so a
+release build never performs that DataStore read.
 
-`TunnelLifecycleTest` lives in `app/src/androidTestRelease`, so the claim is
-still checked on every push against the artefact that ships, and a debug run
-reports four tests rather than a fifth it skipped. Moving the file back is the
-fix. Nothing here is evidence that the tunnel is wrong on a debug build, only
-that this app never sees it start.
+`TunnelLifecycleTest` lives in `app/src/androidTestRelease`, which today means
+it does not run: the release cell discovers no tests. Until that is fixed the
+claim is unproven rather than proven elsewhere, and nothing here is evidence
+that the tunnel is wrong on a debug build, only that this app never sees it
+start.
+
+The release cell finds no tests to run, and reported success for it until
+`device-ran.sh` began failing an empty run. Neither R8 shrinking the test APK
+nor obfuscating the app explains it: both are off now and the count is still
+zero.
